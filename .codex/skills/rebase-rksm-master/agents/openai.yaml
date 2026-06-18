@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rebase rksm/master"
+  short_description: "Rebase the rksm fork on upstream master"
+  default_prompt: "Use $rebase-rksm-master to rebase rksm/master onto origin/master and push the fork."
