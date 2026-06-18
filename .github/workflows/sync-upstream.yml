@@ -1,0 +1,47 @@
+name: Rebase Upstream
+
+on:
+  workflow_dispatch:
+  schedule:
+    # GitHub schedules use UTC.
+    - cron: "0 6,16 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rebase-upstream-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'rksm/herdr'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Configure git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/ogulcancelik/herdr.git
+          git fetch upstream master:refs/remotes/upstream/master
+
+      - name: Rebase onto upstream
+        run: |
+          set -euo pipefail
+          if ! git rebase upstream/master; then
+            echo "::error::Rebase conflict while syncing fork master onto upstream/master."
+            git status --short
+            exit 1
+          fi
+
+      - name: Push fork
+        run: git push --force-with-lease origin HEAD:master
