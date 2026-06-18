@@ -1,0 +1,109 @@
+name: Rebase Upstream
+
+on:
+  workflow_dispatch:
+  schedule:
+    # GitHub schedules use UTC.
+    - cron: "0 7 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rebase-upstream-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'rksm/herdr'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: master
+          fetch-depth: 0
+          # The rebase replays upstream commits that touch .github/workflows, and GITHUB_TOKEN
+          # is a GitHub App token, which GitHub forbids from writing workflow files. Push over
+          # SSH with a repository deploy key instead.
+          persist-credentials: false
+
+      - name: Configure git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Set up push key
+        env:
+          REBASE_SSH_KEY: ${{ secrets.REBASE_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$REBASE_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' >> ~/.ssh/known_hosts
+
+      - name: Set up remotes
+        # The conflict-resolution skill in .codex/skills/rebase-rksm-master expects the same
+        # remote names as a local checkout: origin is upstream herdr, rksm is this fork.
+        run: |
+          set -euo pipefail
+          git remote rename origin rksm
+          git remote set-url rksm git@github.com:rksm/herdr.git
+          git remote add origin https://github.com/ogulcancelik/herdr.git
+          git fetch origin master
+          git remote -v
+          ssh -o BatchMode=yes -T git@github.com 2>&1 | head -1 || true
+
+      - name: Rebase onto upstream
+        id: rebase
+        run: |
+          set -euo pipefail
+          if git rebase origin/master; then
+            echo "conflict=false" >> "$GITHUB_OUTPUT"
+          else
+            git rebase --abort
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Rebase conflict while syncing fork master onto origin/master, handing resolution to codex."
+          fi
+
+      - name: Install codex
+        if: steps.rebase.outputs.conflict == 'true'
+        run: npm install --global @openai/codex@0.145.0
+
+      - name: Resolve conflicts with codex
+        if: steps.rebase.outputs.conflict == 'true'
+        timeout-minutes: 45
+        env:
+          CODEX_HOME: ${{ runner.temp }}/codex-home
+          # Kept out of the job-wide environment. Codex strips *KEY* variables from the
+          # subprocesses it spawns, so repository code it runs does not see the key.
+          CODEX_RUN_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$CODEX_HOME"
+          prompt="Please execute the skill .codex/skills/rebase-rksm-master/SKILL.md. Skip its validation step: this GitHub Actions runner has no project toolchain, so do not run nix, just, cargo, or any other build, test, or formatting command."
+          CODEX_API_KEY="$CODEX_RUN_API_KEY" codex exec \
+            --model gpt-5.5 \
+            -c model_reasoning_effort=medium \
+            -s danger-full-access \
+            -- "$prompt"
+
+      - name: Push fork
+        # The skill pushes to rksm itself when it resolves conflicts, so only push what is
+        # still missing, and never push a HEAD that is not actually rebased onto upstream.
+        run: |
+          set -euo pipefail
+          git fetch origin master
+          git fetch rksm master
+          if git merge-base --is-ancestor origin/master refs/remotes/rksm/master; then
+            echo "rksm/master ($(git rev-parse --short refs/remotes/rksm/master)) already contains origin/master."
+            exit 0
+          fi
+          if ! git merge-base --is-ancestor origin/master HEAD; then
+            echo "::error::HEAD is not rebased onto origin/master, refusing to push."
+            git status --short
+            exit 1
+          fi
+          git push --force-with-lease rksm HEAD:master
