@@ -3,9 +3,10 @@ use std::time::{Duration, Instant};
 use crossterm::terminal;
 
 use super::{
-    background_update_check_enabled, pressed_key_identity, App, ANIMATION_INTERVAL,
-    AUTO_UPDATE_CHECK_INTERVAL, GIT_REMOTE_STATUS_REFRESH_INTERVAL, MIN_RENDER_INTERVAL,
-    RESIZE_POLL_INTERVAL, SELECTION_AUTOSCROLL_INTERVAL,
+    background_update_check_enabled, mode_accepts_repeat_key, pressed_key_identity,
+    suppress_repeats_after_press, App, ANIMATION_INTERVAL, AUTO_UPDATE_CHECK_INTERVAL,
+    GIT_REMOTE_STATUS_REFRESH_INTERVAL, MIN_RENDER_INTERVAL, RESIZE_POLL_INTERVAL,
+    SELECTION_AUTOSCROLL_INTERVAL,
 };
 use crate::events::AppEvent;
 use crate::workspace::{GitStatusCacheEntry, Workspace, WorkspaceGitStatus};
@@ -142,13 +143,8 @@ impl App {
                 let pressed_key_id = pressed_key_identity(super::LOCAL_INPUT_SOURCE, &key);
                 match key.kind {
                     crossterm::event::KeyEventKind::Press => {
-                        if self.state.popup_pane.is_some()
-                            || self.state.mode == crate::app::Mode::Terminal
-                        {
-                            self.suppressed_repeat_keys.remove(&pressed_key_id);
-                        } else {
-                            self.suppressed_repeat_keys.insert(pressed_key_id);
-                        }
+                        let routed_to_terminal_before_press = self.state.popup_pane.is_some()
+                            || self.state.mode == crate::app::Mode::Terminal;
                         if let Some(target) = self.handle_key(key).await {
                             if !key.is_text_commit {
                                 self.pressed_terminal_keys.insert(
@@ -158,6 +154,16 @@ impl App {
                             }
                         } else {
                             self.pressed_terminal_keys.remove(&pressed_key_id);
+                        }
+                        let routed_to_terminal_after_press = self.state.popup_pane.is_some()
+                            || self.state.mode == crate::app::Mode::Terminal;
+                        if suppress_repeats_after_press(
+                            routed_to_terminal_before_press,
+                            routed_to_terminal_after_press,
+                        ) {
+                            self.suppressed_repeat_keys.insert(pressed_key_id);
+                        } else {
+                            self.suppressed_repeat_keys.remove(&pressed_key_id);
                         }
                         true
                     }
@@ -176,6 +182,9 @@ impl App {
                             || self.state.mode == crate::app::Mode::Terminal)
                             && !self.suppressed_repeat_keys.contains(&pressed_key_id)
                         {
+                            self.handle_key(key).await;
+                            true
+                        } else if mode_accepts_repeat_key(self.state.mode, &key) {
                             self.handle_key(key).await;
                             true
                         } else {
