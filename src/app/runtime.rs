@@ -3,9 +3,10 @@ use std::time::{Duration, Instant};
 use crossterm::terminal;
 
 use super::{
-    background_update_check_enabled, repeat_key_identity, App, Mode, ANIMATION_INTERVAL,
-    AUTO_UPDATE_CHECK_INTERVAL, GIT_REMOTE_STATUS_REFRESH_INTERVAL, MIN_RENDER_INTERVAL,
-    RESIZE_POLL_INTERVAL, SELECTION_AUTOSCROLL_INTERVAL,
+    background_update_check_enabled, mode_accepts_repeat_key, repeat_key_identity,
+    suppress_repeats_after_press, App, Mode, ANIMATION_INTERVAL, AUTO_UPDATE_CHECK_INTERVAL,
+    GIT_REMOTE_STATUS_REFRESH_INTERVAL, MIN_RENDER_INTERVAL, RESIZE_POLL_INTERVAL,
+    SELECTION_AUTOSCROLL_INTERVAL,
 };
 use crate::events::AppEvent;
 use crate::workspace::{GitStatusCacheEntry, Workspace, WorkspaceGitStatus};
@@ -121,18 +122,20 @@ impl App {
                 let key_id = repeat_key_identity(&key);
                 match key.kind {
                     crossterm::event::KeyEventKind::Press => {
-                        if self.state.mode == Mode::Terminal {
-                            self.suppressed_repeat_keys.remove(&key_id);
-                        } else {
-                            self.suppressed_repeat_keys.insert(key_id);
-                        }
+                        let mode_before_press = self.state.mode;
                         self.handle_key(key).await;
+                        if suppress_repeats_after_press(mode_before_press, self.state.mode) {
+                            self.suppressed_repeat_keys.insert(key_id);
+                        } else {
+                            self.suppressed_repeat_keys.remove(&key_id);
+                        }
                         true
                     }
                     crossterm::event::KeyEventKind::Repeat => {
-                        if self.state.mode == Mode::Terminal
-                            && !self.suppressed_repeat_keys.contains(&key_id)
-                        {
+                        let should_handle_repeat = (self.state.mode == Mode::Terminal
+                            && !self.suppressed_repeat_keys.contains(&key_id))
+                            || mode_accepts_repeat_key(self.state.mode, &key);
+                        if should_handle_repeat {
                             self.handle_key(key).await;
                             true
                         } else {

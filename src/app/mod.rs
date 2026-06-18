@@ -192,6 +192,35 @@ fn repeat_key_identity(
     (key.code, key.modifiers)
 }
 
+fn suppress_repeats_after_press(previous_mode: Mode, current_mode: Mode) -> bool {
+    previous_mode != Mode::Terminal && current_mode == Mode::Terminal
+}
+
+fn mode_accepts_repeat_key(mode: Mode, key: &crate::input::TerminalKey) -> bool {
+    match mode {
+        Mode::Copy => copy_mode_accepts_repeat_key(key),
+        _ => false,
+    }
+}
+
+fn copy_mode_accepts_repeat_key(key: &crate::input::TerminalKey) -> bool {
+    match key.code {
+        crossterm::event::KeyCode::Left
+        | crossterm::event::KeyCode::Down
+        | crossterm::event::KeyCode::Up
+        | crossterm::event::KeyCode::Right
+        | crossterm::event::KeyCode::PageUp
+        | crossterm::event::KeyCode::PageDown
+        | crossterm::event::KeyCode::Home
+        | crossterm::event::KeyCode::End => true,
+        crossterm::event::KeyCode::Char('h' | 'j' | 'k' | 'l') => key.modifiers.is_empty(),
+        crossterm::event::KeyCode::Char('u' | 'd') => key
+            .modifiers
+            .contains(crossterm::event::KeyModifiers::CONTROL),
+        _ => false,
+    }
+}
+
 fn auto_updates_enabled(no_session: bool) -> bool {
     !no_session && !cfg!(debug_assertions)
 }
@@ -1489,12 +1518,16 @@ impl App {
                     let key_id = repeat_key_identity(&key);
                     match key.kind {
                         crossterm::event::KeyEventKind::Press => {
+                            let mode_before_press = self.state.mode;
                             if self.state.mode == Mode::Terminal {
-                                self.suppressed_repeat_keys.remove(&key_id);
                                 self.handle_terminal_key_headless(key);
                             } else {
-                                self.suppressed_repeat_keys.insert(key_id);
                                 self.handle_non_terminal_key_headless(key);
+                            }
+                            if suppress_repeats_after_press(mode_before_press, self.state.mode) {
+                                self.suppressed_repeat_keys.insert(key_id);
+                            } else {
+                                self.suppressed_repeat_keys.remove(&key_id);
                             }
                         }
                         crossterm::event::KeyEventKind::Repeat => {
@@ -1502,9 +1535,9 @@ impl App {
                                 && !self.suppressed_repeat_keys.contains(&key_id)
                             {
                                 self.handle_terminal_key_headless(key);
+                            } else if mode_accepts_repeat_key(self.state.mode, &key) {
+                                self.handle_non_terminal_key_headless(key);
                             }
-                            // Repeats in non-terminal modes are ignored
-                            // (same as monolithic behavior).
                         }
                         crossterm::event::KeyEventKind::Release => {
                             self.suppressed_repeat_keys.remove(&key_id);
@@ -1682,6 +1715,34 @@ mod tests {
             scroll: 0,
             preview: true,
         }
+    }
+
+    fn app_with_copy_mode_for_repeat_test() -> App {
+        let mut app = test_app();
+        let mut ws = Workspace::test_new("copy-repeat");
+        let pane_id = ws.tabs[0].root_pane;
+        let pane_infos = ws.tabs[0]
+            .layout
+            .panes(ratatui::layout::Rect::new(0, 0, 20, 5));
+        let info = pane_infos[0].clone();
+        ws.tabs[0].runtimes.insert(
+            pane_id,
+            TerminalRuntime::test_with_screen_bytes(
+                info.inner_rect.width,
+                info.inner_rect.height,
+                b"alpha\nbeta\ngamma\n",
+            ),
+        );
+        app.state.workspaces = vec![ws];
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Terminal;
+        app.state.view.pane_infos = pane_infos;
+        app.state.enter_copy_mode(&app.terminal_runtimes);
+        let copy_mode = app.state.copy_mode.as_mut().expect("copy mode");
+        copy_mode.cursor_row = 0;
+        copy_mode.cursor_col = 0;
+        app
     }
 
     fn test_app() -> App {
@@ -2986,6 +3047,45 @@ mod tests {
         assert!(!handled);
         assert_eq!(app.state.mode, Mode::ReleaseNotes);
         assert!(app.state.release_notes.is_some());
+    }
+
+    #[tokio::test]
+    async fn copy_mode_handles_repeat_arrow_key_events() {
+        let mut app = app_with_copy_mode_for_repeat_test();
+
+        let press_handled = app
+            .handle_raw_input_event(raw_key(
+                KeyCode::Down,
+                KeyModifiers::empty(),
+                KeyEventKind::Press,
+            ))
+            .await;
+        let repeat_handled = app
+            .handle_raw_input_event(raw_key(
+                KeyCode::Down,
+                KeyModifiers::empty(),
+                KeyEventKind::Repeat,
+            ))
+            .await;
+
+        assert!(press_handled);
+        assert!(repeat_handled);
+        assert_eq!(app.state.copy_mode.expect("copy mode").cursor_row, 2);
+    }
+
+    #[tokio::test]
+    async fn copy_mode_headless_route_handles_repeat_arrow_key_events() {
+        let mut app = app_with_copy_mode_for_repeat_test();
+
+        app.route_client_events(
+            vec![
+                raw_key(KeyCode::Down, KeyModifiers::empty(), KeyEventKind::Press),
+                raw_key(KeyCode::Down, KeyModifiers::empty(), KeyEventKind::Repeat),
+            ],
+            true,
+        );
+
+        assert_eq!(app.state.copy_mode.expect("copy mode").cursor_row, 2);
     }
 
     #[tokio::test]
