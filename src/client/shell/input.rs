@@ -10,6 +10,22 @@ fn is_retained_selection_copy_key(key: &crate::input::TerminalKey) -> bool {
         && matches!(key.modifiers, KeyModifiers::CONTROL | KeyModifiers::SUPER)
 }
 
+fn copy_mode_accepts_repeat_key(key: &crate::input::TerminalKey) -> bool {
+    match key.code {
+        KeyCode::Left
+        | KeyCode::Down
+        | KeyCode::Up
+        | KeyCode::Right
+        | KeyCode::PageUp
+        | KeyCode::PageDown
+        | KeyCode::Home
+        | KeyCode::End => true,
+        KeyCode::Char('h' | 'j' | 'k' | 'l') => key.modifiers.is_empty(),
+        KeyCode::Char('u' | 'd') => key.modifiers.contains(KeyModifiers::CONTROL),
+        _ => false,
+    }
+}
+
 pub(super) fn is_modal_paste_shortcut_for_platform(
     key: &crate::input::TerminalKey,
     macos: bool,
@@ -320,7 +336,12 @@ impl ClientShellState {
                 let plan = self
                     .input_leases
                     .plan_repeat(lease_key, &key, Some(&context));
-                self.execute_repeat_plan(lease_key, key, plan, outcome);
+                if !self.execute_repeat_plan(lease_key, key.clone(), plan, outcome)
+                    && self.mode == ClientShellMode::Copy
+                    && copy_mode_accepts_repeat_key(&key)
+                {
+                    self.route_key_press(&key, outcome);
+                }
             }
             KeyEventKind::Release => {
                 if let Some(lease) = self.input_leases.remove_forwarded(&lease_key) {
@@ -387,7 +408,7 @@ impl ClientShellState {
         key: crate::input::TerminalKey,
         plan: crate::input::RepeatPlan<ClientInputContext, ClientInputTarget>,
         outcome: &mut ClientShellInput,
-    ) {
+    ) -> bool {
         match plan {
             crate::input::RepeatPlan::Forwarded(target) => {
                 let pane_blocked_by_popup = matches!(&target, ClientInputTarget::Pane(_))
@@ -395,6 +416,7 @@ impl ClientShellState {
                 if !pane_blocked_by_popup {
                     self.push_pane_key(target, key, outcome);
                 }
+                true
             }
             crate::input::RepeatPlan::Reprocess {
                 context,
@@ -419,8 +441,9 @@ impl ClientShellState {
                         self.push_pane_key(target, repeated, outcome);
                     }
                 }
+                true
             }
-            crate::input::RepeatPlan::Ignore => {}
+            crate::input::RepeatPlan::Ignore => false,
         }
     }
 

@@ -950,6 +950,36 @@ fn retained_selection_copy_suppresses_key_repeats() {
 }
 
 #[test]
+fn copy_mode_handles_repeat_arrow_key_events() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot()));
+    let mut pane_surface = surface();
+    pane_surface.panes[0].scroll = Some(crate::protocol::PaneSurfaceScrollMetrics {
+        offset_from_bottom: 0,
+        max_offset_from_bottom: 0,
+        viewport_rows: 2,
+    });
+    state.set_pane_surface(pane_surface);
+    state.compose(106, 20).expect("composed frame");
+    let mut enter = ClientShellInput::default();
+    state.record_binding(
+        crate::input::KeybindMatch::Action(crate::input::KeybindAction::CopyMode),
+        &mut enter,
+    );
+    let copy_mode = state.copy_mode.as_mut().expect("copy mode");
+    copy_mode.cursor.row = 0;
+    copy_mode.cursor.col = 0;
+
+    let key = crate::input::TerminalKey::new(KeyCode::Right, KeyModifiers::empty());
+    state.handle_raw_events(vec![RawInputEvent::Key(key.clone())]);
+    state.handle_raw_events(vec![RawInputEvent::Key(
+        key.with_kind(crossterm::event::KeyEventKind::Repeat),
+    )]);
+
+    assert_eq!(state.copy_mode.expect("copy mode").cursor.col, 2);
+}
+
+#[test]
 fn rapid_copy_motions_are_chained_from_the_previous_result() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     state.set_snapshot(Box::new(snapshot()));
