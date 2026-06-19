@@ -114,7 +114,7 @@ pub fn parse_agent_label(agent: &str) -> Option<Agent> {
     match name.as_str() {
         "pi" => Some(Agent::Pi),
         "claude" | "claude-code" => Some(Agent::Claude),
-        "codex" => Some(Agent::Codex),
+        "codex" | "codex-raw" => Some(Agent::Codex),
         "gemini" => Some(Agent::Gemini),
         "cursor" | "cursor-agent" => Some(Agent::Cursor),
         "devin" | "devin-cli" | "devin cli" => Some(Agent::Devin),
@@ -143,7 +143,7 @@ pub fn identify_agent(process_name: &str) -> Option<Agent> {
     match name.as_str() {
         "pi" => Some(Agent::Pi),
         "claude" | "claude-code" => Some(Agent::Claude),
-        "codex" => Some(Agent::Codex),
+        "codex" | "codex-raw" => Some(Agent::Codex),
         "gemini" => Some(Agent::Gemini),
         "cursor" | "cursor-agent" => Some(Agent::Cursor),
         "devin" | "devin-cli" | "devin cli" => Some(Agent::Devin),
@@ -612,6 +612,7 @@ mod tests {
         assert_eq!(identify_agent("claude"), Some(Agent::Claude));
         assert_eq!(identify_agent("claude-code"), Some(Agent::Claude));
         assert_eq!(identify_agent("codex"), Some(Agent::Codex));
+        assert_eq!(identify_agent("codex-raw"), Some(Agent::Codex));
         assert_eq!(identify_agent("gemini"), Some(Agent::Gemini));
         assert_eq!(identify_agent("cursor"), Some(Agent::Cursor));
         assert_eq!(identify_agent("cursor-agent"), Some(Agent::Cursor));
@@ -641,6 +642,7 @@ mod tests {
     fn parse_known_agent_labels() {
         assert_eq!(parse_agent_label("pi"), Some(Agent::Pi));
         assert_eq!(parse_agent_label("claude"), Some(Agent::Claude));
+        assert_eq!(parse_agent_label("codex-raw"), Some(Agent::Codex));
         assert_eq!(parse_agent_label("cursor-agent"), Some(Agent::Cursor));
         assert_eq!(parse_agent_label("devin-cli"), Some(Agent::Devin));
         assert_eq!(parse_agent_label("agy"), Some(Agent::Antigravity));
@@ -752,6 +754,23 @@ mod tests {
         assert_eq!(
             identify_agent_in_job(&job),
             Some((Agent::Codex, "codex".to_string()))
+        );
+    }
+
+    #[test]
+    fn identify_agent_in_job_detects_direct_codex_raw_process() {
+        let job = crate::platform::ForegroundJob {
+            process_group_id: 123,
+            processes: vec![foreground_process(
+                123,
+                "codex-raw",
+                &["/nix/store/example-codex/bin/codex-raw", "--yolo"],
+            )],
+        };
+
+        assert_eq!(
+            identify_agent_in_job(&job),
+            Some((Agent::Codex, "codex-raw".to_string()))
         );
     }
 
