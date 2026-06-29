@@ -148,6 +148,7 @@
 - `prefix+e` scrollback editor panes now open on Windows without trying to run `/bin/sh`; Windows uses `VISUAL`, then `EDITOR`, then `notepad.exe` as the fallback editor. (#914)
 - `herdr pane split --current` now resolves to the calling Herdr pane instead of the UI-focused pane when run inside a pane. (#902)
 - Codex sessions launched as `codex-raw` are now detected as Codex panes, so they appear in the agent panel and receive normal screen-manifest status updates.
+- Legacy terminal fallback bytes for `ctrl+alt` letter chords are now parsed as `ctrl+alt` keybindings, so prefixes such as `keys.prefix = "ctrl+alt+b"` work when the outer terminal sends `Esc` plus a control byte instead of an enhanced keyboard sequence.
 - Native Windows clients running inside Alacritty now preserve mouse reports and `ctrl+j` input instead of leaking mouse escape sequences into panes. `shift+enter` remains dependent on whether the outer terminal reports it as a distinct modified Enter key. (#792)
 - Windows clients now preserve bracketed paste, Backspace, modifier-only keys, host cursor drawing, native clipboard copies, recent pane reads, and wait connections across the native input path. (#670, #795, #907, #920, #930, #962, #963, #1067)
 - New tabs and workspaces now follow the focused pane's current directory more reliably, including PowerShell panes that report cwd through prompt shell integration on Windows. (#912, #919)
