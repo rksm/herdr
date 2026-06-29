@@ -5,6 +5,7 @@ legacy_enter	0d	enter	-	press
 legacy_tab	09	tab	-	press	
 legacy_backspace	7f	backspace	-	press	
 legacy_alt_backspace	1b7f	backspace	alt	press
+legacy_ctrl_alt_b	1b02	char:b	control+alt	press
 legacy_up	1b5b41	up	-	press	
 legacy_home	1b5b48	home	-	press	
 xterm_alt_up	1b5b313b3341	up	alt	press	

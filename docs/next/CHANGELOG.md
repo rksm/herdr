@@ -4,6 +4,7 @@
 
 ### Fixed
 - Codex sessions launched as `codex-raw` are now detected as Codex panes, so they appear in the agent panel and receive normal screen-manifest status updates.
+- Legacy terminal fallback bytes for `ctrl+alt` letter chords are now parsed as `ctrl+alt` keybindings, so prefixes such as `keys.prefix = "ctrl+alt+b"` work when the outer terminal sends `Esc` plus a control byte instead of an enhanced keyboard sequence.
 - Native Windows clients running inside Alacritty now preserve mouse reports and `ctrl+j` input instead of leaking mouse escape sequences into panes. `shift+enter` remains dependent on whether the outer terminal reports it as a distinct modified Enter key. (#792)
 
 ## [0.7.1] - 2026-06-24

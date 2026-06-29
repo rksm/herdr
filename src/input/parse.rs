@@ -73,6 +73,10 @@ fn parse_legacy_key_sequence(data: &str) -> Option<TerminalKey> {
             let rest = data.strip_prefix('\x1b')?;
             if rest.chars().count() == 1 {
                 let ch = rest.chars().next()?;
+                if let Some(mut key) = parse_legacy_ctrl_char(ch) {
+                    key.modifiers |= KeyModifiers::ALT;
+                    return Some(key);
+                }
                 Some(TerminalKey::new(KeyCode::Char(ch), KeyModifiers::ALT))
             } else {
                 None
@@ -612,6 +616,13 @@ mod tests {
         let key = parse_terminal_key_sequence("\x1b\x7f").unwrap();
         assert_eq!(key.code, KeyCode::Backspace);
         assert_eq!(key.modifiers, KeyModifiers::ALT);
+    }
+
+    #[test]
+    fn parse_legacy_ctrl_alt_b_sequence() {
+        let key = parse_terminal_key_sequence("\x1b\x02").unwrap();
+        assert_eq!(key.code, KeyCode::Char('b'));
+        assert_eq!(key.modifiers, KeyModifiers::CONTROL | KeyModifiers::ALT);
     }
 
     #[test]
