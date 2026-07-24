@@ -3,7 +3,7 @@
 # managed by herdr; reinstalling or updating the integration overwrites this file.
 # add custom hooks beside this file instead of editing it.
 # HERDR_INTEGRATION_ID=claude
-# HERDR_INTEGRATION_VERSION=10
+# HERDR_INTEGRATION_VERSION=11
 
 set -eu
 
@@ -51,7 +51,7 @@ if hook_input_file:
 if "CURSOR_VERSION" in os.environ or "cursor_version" in hook_input:
     raise SystemExit(0)
 hook_event_name = str(hook_input.get("hook_event_name") or "")
-if hook_event_name != "SessionStart":
+if hook_event_name not in ("SessionStart", "UserPromptSubmit"):
     raise SystemExit(0)
 is_subagent = bool(hook_input.get("agent_id"))
 if is_subagent:
@@ -65,6 +65,12 @@ agent_session_path = transcript_path if isinstance(transcript_path, str) and tra
 session_start_source = hook_input.get("source") if hook_event_name == "SessionStart" else None
 if not isinstance(session_start_source, str) or not session_start_source:
     session_start_source = None
+permission_mode = hook_input.get("permission_mode")
+if not isinstance(permission_mode, str) or not permission_mode:
+    permission_mode = None
+# Claude Code reports its permission mode on prompts, not on session start.
+if hook_event_name == "UserPromptSubmit" and not permission_mode:
+    raise SystemExit(0)
 if agent_session_id:
     params = {
         "pane_id": pane_id,
@@ -77,6 +83,8 @@ if agent_session_id:
         params["agent_session_path"] = agent_session_path
     if session_start_source:
         params["session_start_source"] = session_start_source
+    if permission_mode:
+        params["permission_mode"] = permission_mode
     request = {
         "id": request_id,
         "method": "pane.report_agent_session",
