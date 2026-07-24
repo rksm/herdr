@@ -838,7 +838,12 @@ fn restore_plan_for_snapshot(
         return None;
     }
     let persisted = persisted_agent_session_from_snapshot(session)?;
-    crate::agent_resume::plan(&session.source, &session.agent, &persisted.session_ref)
+    crate::agent_resume::plan_with_full_permissions(
+        &session.source,
+        &session.agent,
+        &persisted.session_ref,
+        persisted.started_with_full_permissions,
+    )
 }
 
 fn persisted_agent_session_from_snapshot(
@@ -849,6 +854,7 @@ fn persisted_agent_session_from_snapshot(
         &session.agent,
         session.kind,
         &session.value,
+        session.started_with_full_permissions,
     )
 }
 
@@ -1066,6 +1072,7 @@ mod tests {
             agent: "pi".into(),
             kind: crate::agent_resume::AgentSessionRefKind::Path,
             value: pi_session_path.clone(),
+            started_with_full_permissions: false,
         };
 
         assert!(restore_plan_for_snapshot(&session, false).is_none());
@@ -1079,8 +1086,41 @@ mod tests {
             agent: "claude".into(),
             kind: crate::agent_resume::AgentSessionRefKind::Path,
             value: test_session_path("claude-session"),
+            started_with_full_permissions: false,
         };
         assert!(restore_plan_for_snapshot(&unsupported_path, true).is_none());
+    }
+
+    #[test]
+    fn restore_plan_preserves_claude_and_codex_full_permissions() {
+        let claude = super::super::snapshot::PaneAgentSessionSnapshot {
+            source: "herdr:claude".into(),
+            agent: "claude".into(),
+            kind: crate::agent_resume::AgentSessionRefKind::Id,
+            value: "claude-session".into(),
+            started_with_full_permissions: true,
+        };
+        let codex = super::super::snapshot::PaneAgentSessionSnapshot {
+            source: "herdr:codex".into(),
+            agent: "codex".into(),
+            kind: crate::agent_resume::AgentSessionRefKind::Id,
+            value: "codex-session".into(),
+            started_with_full_permissions: true,
+        };
+
+        assert_eq!(
+            restore_plan_for_snapshot(&claude, true).unwrap().argv,
+            vec![
+                "claude",
+                "--resume",
+                "claude-session",
+                "--dangerously-skip-permissions"
+            ]
+        );
+        assert_eq!(
+            restore_plan_for_snapshot(&codex, true).unwrap().argv,
+            vec!["codex", "resume", "--yolo", "codex-session"]
+        );
     }
 
     #[test]
@@ -1091,6 +1131,7 @@ mod tests {
             agent: "pi".into(),
             kind: crate::agent_resume::AgentSessionRefKind::Path,
             value: pi_session_path.clone(),
+            started_with_full_permissions: false,
         };
         let mut resumed = HashSet::new();
 
@@ -1113,6 +1154,7 @@ mod tests {
             agent: "pi".into(),
             kind: crate::agent_resume::AgentSessionRefKind::Path,
             value: test_session_path("pi-session.jsonl"),
+            started_with_full_permissions: false,
         };
         let history = super::super::snapshot::PaneHistorySnapshot {
             ansi: "RESTORED_HISTORY\r\n".into(),
@@ -1138,6 +1180,7 @@ mod tests {
             agent: "pi".into(),
             kind: crate::agent_resume::AgentSessionRefKind::Path,
             value: test_session_path("pi-session.jsonl"),
+            started_with_full_permissions: false,
         };
         let history = super::super::snapshot::PaneHistorySnapshot {
             ansi: "RESTORED_HISTORY\r\n".into(),
@@ -1166,6 +1209,7 @@ mod tests {
             agent: "pi".into(),
             kind: crate::agent_resume::AgentSessionRefKind::Path,
             value: test_session_path("pi-session.jsonl"),
+            started_with_full_permissions: false,
         };
         let history = super::super::snapshot::PaneHistorySnapshot {
             ansi: "RESTORED_HISTORY\r\n".into(),
@@ -1192,6 +1236,7 @@ mod tests {
             agent: "hermes".into(),
             kind: crate::agent_resume::AgentSessionRefKind::Id,
             value: "hermes-session".into(),
+            started_with_full_permissions: false,
         };
 
         let preserved = restored_terminal_agent_session(Some(&session), false)
@@ -1208,6 +1253,7 @@ mod tests {
             agent: "pi".into(),
             kind: crate::agent_resume::AgentSessionRefKind::Path,
             value: test_session_path("pi-session.jsonl"),
+            started_with_full_permissions: false,
         };
         let mut resumed = HashSet::new();
         assert!(take_restore_plan_for_snapshot(&session, true, &mut resumed).is_some());
@@ -1331,6 +1377,7 @@ mod tests {
                                 agent: "opencode".into(),
                                 kind: crate::agent_resume::AgentSessionRefKind::Id,
                                 value: "opencode-session".into(),
+                                started_with_full_permissions: false,
                             }),
                             launch_argv: None,
                         },
@@ -1491,6 +1538,7 @@ mod tests {
                 agent: "codex".into(),
                 kind: crate::agent_resume::AgentSessionRefKind::Id,
                 value: "codex-session".into(),
+                started_with_full_permissions: false,
             }),
             launch_argv: None,
         };
@@ -1642,6 +1690,7 @@ mod tests {
                                 agent: "codex".into(),
                                 kind: crate::agent_resume::AgentSessionRefKind::Id,
                                 value: "codex-session".into(),
+                                started_with_full_permissions: false,
                             }),
                             launch_argv: None,
                         },

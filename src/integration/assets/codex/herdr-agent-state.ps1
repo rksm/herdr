@@ -43,6 +43,9 @@ try {
     if ($payload.hook_event_name -eq "SessionStart" -and $payload.source -is [string] -and -not [string]::IsNullOrWhiteSpace($payload.source)) {
         $args += @("--session-start-source", "$($payload.source)")
     }
+    if ($payload.hook_event_name -eq "SessionStart" -and $payload.permission_mode -is [string] -and -not [string]::IsNullOrWhiteSpace($payload.permission_mode)) {
+        $args += @("--permission-mode", "$($payload.permission_mode)")
+    }
     & $herdr @args 2>$null | Out-Null
 } catch {
 }
