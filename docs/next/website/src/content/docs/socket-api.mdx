@@ -670,10 +670,13 @@ Session-only official integrations report native session references with `pane.r
     "pane_id": "w1:p1",
     "source": "herdr:codex",
     "agent": "codex",
-    "agent_session_id": "..."
+    "agent_session_id": "...",
+    "permission_mode": "bypassPermissions"
   }
 }
 ```
+
+Official Claude Code, Codex, and Hermes Agent integrations include `permission_mode` on session-start reports. Herdr uses `bypassPermissions` to preserve full-permission startup mode during native restore.
 
 `pane.get`, `pane.list`, `agent.get`, and `agent.list` expose a read-only `agent_session` object when Herdr has a stored native session reference:
 

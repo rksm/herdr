@@ -9549,6 +9549,7 @@ next_tab = ""
                         .to_string(),
                 )
                 .unwrap(),
+                started_with_full_permissions: false,
             });
         server
             .app

@@ -62,6 +62,8 @@ Herdr only resumes panes that reported a native session reference through a curr
 
 After a client attaches and provides terminal size and theme context, Herdr resumes eligible restored agent panes across workspaces and tabs without waiting for each pane to be focused.
 
+Claude Code integration version `8`, Codex integration version `7`, and Hermes Agent integration version `4` also report whether a session started in full-permission mode. Herdr restores those sessions with `claude --resume <id> --dangerously-skip-permissions`, `codex resume --yolo <id>`, and `hermes --resume <id> --yolo` respectively. Sessions started in another permission mode keep the standard resume commands.
+
 Native session restore requires these Herdr integration versions or newer:
 
 | Agent | Minimum Herdr integration version | Resume command |

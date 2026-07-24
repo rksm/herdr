@@ -115,6 +115,12 @@ pub struct PaneAgentSessionSnapshot {
     pub agent: String,
     pub kind: crate::agent_resume::AgentSessionRefKind,
     pub value: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub started_with_full_permissions: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Serialize, Deserialize)]
@@ -341,11 +347,21 @@ fn capture_tab(
         let agent_session = terminal.and_then(|terminal| {
             if let Some(authority) = terminal.hook_authority.as_ref() {
                 if let Some(session_ref) = authority.session_ref.as_ref() {
+                    let started_with_full_permissions = terminal
+                        .persisted_agent_session
+                        .as_ref()
+                        .filter(|session| {
+                            session.source == authority.source
+                                && session.agent == authority.agent_label
+                                && session.session_ref == *session_ref
+                        })
+                        .is_some_and(|session| session.started_with_full_permissions);
                     return Some(PaneAgentSessionSnapshot {
                         source: authority.source.clone(),
                         agent: authority.agent_label.clone(),
                         kind: session_ref.kind,
                         value: session_ref.value.clone(),
+                        started_with_full_permissions,
                     });
                 }
             }
@@ -357,6 +373,7 @@ fn capture_tab(
                     agent: session.agent.clone(),
                     kind: session.session_ref.kind,
                     value: session.session_ref.value.clone(),
+                    started_with_full_permissions: session.started_with_full_permissions,
                 })
         });
         panes.insert(
@@ -1117,6 +1134,7 @@ mod tests {
             source: "herdr:pi".into(),
             agent: "pi".into(),
             session_ref: crate::agent_resume::AgentSessionRef::path(session_path.clone()).unwrap(),
+            started_with_full_permissions: false,
         });
         terminal.set_hook_authority_with_session_ref(
             "herdr:pi".into(),
@@ -1158,6 +1176,7 @@ mod tests {
                 source: "herdr:opencode".into(),
                 agent: "opencode".into(),
                 session_ref: crate::agent_resume::AgentSessionRef::id("opencode-session").unwrap(),
+                started_with_full_permissions: false,
             });
 
         let snapshot = capture_from_state(&state);
@@ -1173,6 +1192,48 @@ mod tests {
             crate::agent_resume::AgentSessionRefKind::Id
         );
         assert_eq!(agent_session.value, "opencode-session");
+    }
+
+    #[test]
+    fn agent_session_snapshot_defaults_full_permissions_to_false() {
+        let legacy = serde_json::json!({
+            "source": "herdr:codex",
+            "agent": "codex",
+            "kind": "id",
+            "value": "codex-session"
+        });
+
+        let session: PaneAgentSessionSnapshot = serde_json::from_value(legacy).unwrap();
+
+        assert!(!session.started_with_full_permissions);
+    }
+
+    #[test]
+    fn capture_contract_preserves_full_permissions() {
+        let mut state = state_with_workspaces(&["one"]);
+        let root = state.workspaces[0].tabs[0].root_pane;
+        state.ensure_test_terminals();
+        let terminal_id = state.workspaces[0].tabs[0].panes[&root]
+            .attached_terminal_id
+            .clone();
+        state
+            .terminals
+            .get_mut(&terminal_id)
+            .unwrap()
+            .set_persisted_agent_session(crate::agent_resume::PersistedAgentSession {
+                source: "herdr:codex".into(),
+                agent: "codex".into(),
+                session_ref: crate::agent_resume::AgentSessionRef::id("codex-session").unwrap(),
+                started_with_full_permissions: true,
+            });
+
+        let snapshot = capture_from_state(&state);
+        let agent_session = snapshot.workspaces[0].tabs[0].panes[&root.raw()]
+            .agent_session
+            .as_ref()
+            .expect("persisted agent session should be captured");
+
+        assert!(agent_session.started_with_full_permissions);
     }
 
     #[test]

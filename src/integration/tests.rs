@@ -2690,6 +2690,10 @@ fn bundled_integration_assets_report_session_refs() {
             || CLAUDE_HOOK_ASSET.contains("--session-start-source")
     );
     assert!(
+        CLAUDE_HOOK_ASSET.contains("permission_mode")
+            || CLAUDE_HOOK_ASSET.contains("--permission-mode")
+    );
+    assert!(
         CLAUDE_HOOK_ASSET.contains("pane.report_agent_session")
             || CLAUDE_HOOK_ASSET.contains("report-agent-session")
     );
@@ -2706,6 +2710,10 @@ fn bundled_integration_assets_report_session_refs() {
     assert!(
         CODEX_HOOK_ASSET.contains("session_start_source")
             || CODEX_HOOK_ASSET.contains("--session-start-source")
+    );
+    assert!(
+        CODEX_HOOK_ASSET.contains("permission_mode")
+            || CODEX_HOOK_ASSET.contains("--permission-mode")
     );
     assert!(
         CODEX_HOOK_ASSET.contains("pane.report_agent_session")
@@ -2747,9 +2755,14 @@ fn bundled_integration_assets_report_session_refs() {
     assert!(!KILO_PLUGIN_ASSET.contains("pane.release_agent"));
     assert!(HERMES_PLUGIN_INIT_ASSET.contains("session_id = _session_id(kwargs)"));
     assert!(HERMES_PLUGIN_INIT_ASSET.contains("agent_session_id"));
+    assert!(HERMES_PLUGIN_INIT_ASSET.contains("HERMES_YOLO_MODE"));
+    assert!(HERMES_PLUGIN_INIT_ASSET.contains("\"permission_mode\""));
+    assert!(HERMES_PLUGIN_INIT_ASSET.contains("\"bypassPermissions\""));
     assert!(HERMES_PLUGIN_INIT_ASSET.contains("pane.report_agent_session\","));
     assert!(HERMES_PLUGIN_INIT_ASSET.contains("\"session_start_source\": \"startup\""));
     assert!(HERMES_PLUGIN_INIT_ASSET.contains("pane.report_agent\","));
+    assert!(HERMES_PLUGIN_INIT_ASSET
+        .contains("ctx.register_hook(\"on_session_start\", _session_started)"));
     assert!(HERMES_PLUGIN_INIT_ASSET.contains("on_session_end"));
     assert!(!HERMES_PLUGIN_INIT_ASSET.contains("on_session_finalize"));
     assert!(!HERMES_PLUGIN_INIT_ASSET.contains("pane.release_agent"));

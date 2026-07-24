@@ -63,6 +63,25 @@ def _session_id(kwargs: dict) -> str | None:
     return None
 
 
+def _started_with_full_permissions() -> bool:
+    return os.environ.get("HERMES_YOLO_MODE", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _report_session(**kwargs) -> None:
+    session_id = _session_id(kwargs)
+    if not session_id:
+        return
+    params = {"agent_session_id": session_id}
+    if _started_with_full_permissions():
+        params["permission_mode"] = "bypassPermissions"
+    _send("pane.report_agent_session", params)
+
+
 def _report(state: str, **kwargs) -> None:
     params = {"state": state}
     session_id = _session_id(kwargs)
@@ -94,6 +113,11 @@ def _blocked(**kwargs) -> None:
 
 def _idle(**kwargs) -> None:
     _report("idle", **kwargs)
+
+
+def _session_started(**kwargs) -> None:
+    _report_session(**kwargs)
+    _idle(**kwargs)
 
 
 def register(ctx):

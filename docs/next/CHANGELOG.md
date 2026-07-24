@@ -32,6 +32,7 @@
 - The session navigator now uses connected tree glyphs, groups matches by workspace, and automatically selects the first result when a search begins. (#1611)
 
 ### Fixed
+- Claude Code sessions started in full-permission mode now resume with `--dangerously-skip-permissions` after a Herdr server restart, while Codex and Hermes sessions resume with `--yolo`. (#965)
 - CLI requests now return a machine-readable `protocol_mismatch` error when the client and server protocols differ, while recovery commands remain available. (#1435)
 - Linux sound notifications now terminate and reap audio players that do not exit, preventing unavailable audio from leaving CPU-bound `mpg123` processes behind. (#1622)
 - Oversized bracketed text pastes are now rejected with a client-local notification instead of disconnecting the client. (#1665)
