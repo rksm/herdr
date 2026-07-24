@@ -622,6 +622,7 @@ impl TerminalState {
                         source: authority.source.clone(),
                         agent: authority.agent_label.clone(),
                         session_ref: session_ref.clone(),
+                        started_with_full_permissions: false,
                     }
                 })
             });
@@ -1233,6 +1234,7 @@ impl TerminalState {
                 source: source.clone(),
                 agent: agent_label,
                 session_ref,
+                started_with_full_permissions: false,
             });
             if let Some(pending) = pending {
                 self.hook_report_sequences.insert(source, pending.seq);
@@ -1466,6 +1468,25 @@ impl TerminalState {
         seq: Option<u64>,
         session_start_source: Option<String>,
     ) -> Option<TerminalStateMutation> {
+        self.set_agent_session_ref_for_session_start_with_permissions(
+            source,
+            agent_label,
+            session_ref,
+            seq,
+            session_start_source,
+            false,
+        )
+    }
+
+    pub fn set_agent_session_ref_for_session_start_with_permissions(
+        &mut self,
+        source: String,
+        agent_label: String,
+        session_ref: Option<crate::agent_resume::AgentSessionRef>,
+        seq: Option<u64>,
+        session_start_source: Option<String>,
+        started_with_full_permissions: bool,
+    ) -> Option<TerminalStateMutation> {
         let session_ref = session_ref?;
         let known_agent = crate::detect::parse_agent_label(&agent_label);
         let process_present = known_agent.is_some()
@@ -1668,10 +1689,23 @@ impl TerminalState {
             self.hook_authority = None;
         }
         self.reconcile_agent_name_owner(&agent_label, Some(&session_ref));
+        // Claude Code reports its permission mode only on prompts, so a session
+        // start report must not forget full permissions recorded for the session.
+        let started_with_full_permissions = started_with_full_permissions
+            || self
+                .persisted_agent_session
+                .as_ref()
+                .is_some_and(|session| {
+                    session.source == source
+                        && session.agent == agent_label
+                        && session.session_ref == session_ref
+                        && session.started_with_full_permissions
+                });
         let persisted_session = crate::agent_resume::PersistedAgentSession {
             source,
             agent: agent_label,
             session_ref,
+            started_with_full_permissions,
         };
         if self.managed_agent_launch_session.as_ref() == Some(&persisted_session) {
             self.managed_agent_launch_session = None;
@@ -2478,6 +2512,7 @@ mod tests {
             source: source.into(),
             agent: agent_label.into(),
             session_ref,
+            started_with_full_permissions: false,
         });
     }
 
@@ -2598,6 +2633,7 @@ mod tests {
             source: "herdr:codex".into(),
             agent: "codex".into(),
             session_ref: crate::agent_resume::AgentSessionRef::id("codex-session").unwrap(),
+            started_with_full_permissions: false,
         });
         assert!(timed_out.reconcile_managed_agent_at(now + Duration::from_millis(20), false));
         assert_eq!(timed_out.agent_name, None);
@@ -3022,6 +3058,7 @@ mod tests {
             agent: "pi".into(),
             session_ref: crate::agent_resume::AgentSessionRef::path(old_session)
                 .expect("test session path should be valid"),
+            started_with_full_permissions: false,
         });
 
         let startup = terminal.set_agent_session_ref_for_session_start(
@@ -4814,6 +4851,64 @@ mod tests {
     }
 
     #[test]
+    fn session_start_report_preserves_full_permissions() {
+        let mut terminal = test_terminal();
+
+        terminal
+            .set_agent_session_ref_for_session_start_with_permissions(
+                "herdr:codex".into(),
+                "codex".into(),
+                crate::agent_resume::AgentSessionRef::id("codex-session"),
+                Some(20),
+                Some("startup".into()),
+                true,
+            )
+            .expect("session should be accepted");
+
+        assert!(terminal
+            .persisted_agent_session
+            .as_ref()
+            .is_some_and(|session| session.started_with_full_permissions));
+    }
+
+    #[test]
+    fn full_permissions_last_until_the_session_changes() {
+        let mut terminal = test_terminal();
+        let mut report = |session: &str, seq, session_start_source: Option<&str>, full| {
+            terminal
+                .set_agent_session_ref_for_session_start_with_permissions(
+                    "herdr:claude".into(),
+                    "claude".into(),
+                    crate::agent_resume::AgentSessionRef::id(session),
+                    Some(seq),
+                    session_start_source.map(Into::into),
+                    full,
+                )
+                .expect("session report should be accepted");
+            terminal.persisted_agent_session.as_ref().map(|session| {
+                (
+                    session.session_ref.value.clone(),
+                    session.started_with_full_permissions,
+                )
+            })
+        };
+
+        // A prompt report carries the mode; a later resume report does not.
+        assert_eq!(
+            report("claude-session", 20, None, true),
+            Some(("claude-session".into(), true))
+        );
+        assert_eq!(
+            report("claude-session", 21, Some("resume"), false),
+            Some(("claude-session".into(), true))
+        );
+        assert_eq!(
+            report("cleared-session", 22, Some("clear"), false),
+            Some(("cleared-session".into(), false))
+        );
+    }
+
+    #[test]
     fn claude_lifecycle_session_ref_replaces_existing_session_ref() {
         for session_start_source in ["clear", "resume", "compact"] {
             let mut terminal = test_terminal();
@@ -5475,6 +5570,7 @@ mod tests {
                 source: "herdr:codex".into(),
                 agent: "codex".into(),
                 session_ref: crate::agent_resume::AgentSessionRef::id("codex-session").unwrap(),
+                started_with_full_permissions: false,
             });
             terminal.set_detected_state(Some(Agent::Claude), AgentState::Idle);
 
@@ -5511,6 +5607,7 @@ mod tests {
                 source: "herdr:codex".into(),
                 agent: "codex".into(),
                 session_ref: crate::agent_resume::AgentSessionRef::id("codex-session").unwrap(),
+                started_with_full_permissions: false,
             });
             terminal.set_detected_state(Some(Agent::Claude), AgentState::Idle);
 
@@ -5546,6 +5643,7 @@ mod tests {
                     source: "herdr:codex".into(),
                     agent: "codex".into(),
                     session_ref: crate::agent_resume::AgentSessionRef::id("codex-session").unwrap(),
+                    started_with_full_permissions: false,
                 });
                 terminal.set_detected_state(detected_agent, AgentState::Idle);
 
@@ -5580,6 +5678,7 @@ mod tests {
             source: "herdr:codex".into(),
             agent: "codex".into(),
             session_ref: crate::agent_resume::AgentSessionRef::id("codex-session").unwrap(),
+            started_with_full_permissions: false,
         });
         terminal.set_detected_state(Some(Agent::Claude), AgentState::Idle);
 
@@ -6089,6 +6188,7 @@ mod tests {
             source: "herdr:hermes".into(),
             agent: "hermes".into(),
             session_ref: crate::agent_resume::AgentSessionRef::id("hermes-session").unwrap(),
+            started_with_full_permissions: false,
         });
 
         let mutation = terminal
@@ -6107,6 +6207,7 @@ mod tests {
             source: "herdr:claude".into(),
             agent: "claude".into(),
             session_ref: crate::agent_resume::AgentSessionRef::id("claude-session").unwrap(),
+            started_with_full_permissions: false,
         });
         terminal.set_detected_state(Some(Agent::Pi), AgentState::Idle);
 
@@ -6134,6 +6235,7 @@ mod tests {
             source: "herdr:pi".into(),
             agent: "pi".into(),
             session_ref: session_ref.clone(),
+            started_with_full_permissions: false,
         });
         terminal.set_detected_state(Some(Agent::Pi), AgentState::Working);
 
@@ -6167,6 +6269,7 @@ mod tests {
             source: "herdr:claude".into(),
             agent: "claude".into(),
             session_ref: crate::agent_resume::AgentSessionRef::id("claude-session").unwrap(),
+            started_with_full_permissions: false,
         });
         terminal.set_detected_state(Some(Agent::Pi), AgentState::Working);
 
@@ -6199,6 +6302,7 @@ mod tests {
             source: "herdr:codex".into(),
             agent: "codex".into(),
             session_ref: crate::agent_resume::AgentSessionRef::id("codex-session").unwrap(),
+            started_with_full_permissions: false,
         });
         terminal.set_detected_state(Some(Agent::Codex), AgentState::Idle);
         terminal.set_detected_agent_process_at(Agent::Codex, Instant::now());
@@ -6308,6 +6412,7 @@ mod tests {
             source: "herdr:opencode".into(),
             agent: "opencode".into(),
             session_ref: crate::agent_resume::AgentSessionRef::id("opencode-session").unwrap(),
+            started_with_full_permissions: false,
         });
 
         let first =
@@ -6327,6 +6432,7 @@ mod tests {
             source: "herdr:hermes".into(),
             agent: "hermes".into(),
             session_ref: crate::agent_resume::AgentSessionRef::id("hermes-session").unwrap(),
+            started_with_full_permissions: false,
         });
 
         let mutation = terminal.set_detected_state_with_mutation(None, AgentState::Unknown);
