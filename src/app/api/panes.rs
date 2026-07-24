@@ -1619,6 +1619,11 @@ impl App {
             params.agent_session_id,
             params.agent_session_path,
         );
+        let started_with_full_permissions = crate::agent_resume::started_with_full_permissions(
+            &params.source,
+            &agent_label,
+            params.permission_mode.as_deref(),
+        );
         self.handle_internal_event(crate::events::AppEvent::AgentSessionReported {
             pane_id,
             session_ref: session_ref.clone(),
@@ -1628,6 +1633,7 @@ impl App {
             session_start_source: crate::agent_resume::normalize_session_start_source(
                 params.session_start_source,
             ),
+            started_with_full_permissions,
         });
         let applied =
             report_is_newer && self.session_report_applied(ws_idx, pane_id, session_ref.as_ref());
