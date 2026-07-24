@@ -65,6 +65,9 @@ if inherited_session_id and inherited_session_id != agent_session_id:
 session_start_source = hook_input.get("source") if hook_event_name == "SessionStart" else None
 if not isinstance(session_start_source, str) or not session_start_source:
     session_start_source = None
+permission_mode = hook_input.get("permission_mode") if hook_event_name == "SessionStart" else None
+if not isinstance(permission_mode, str) or not permission_mode:
+    permission_mode = None
 if agent_session_id:
     params = {
         "pane_id": pane_id,
@@ -75,6 +78,8 @@ if agent_session_id:
     }
     if session_start_source:
         params["session_start_source"] = session_start_source
+    if permission_mode:
+        params["permission_mode"] = permission_mode
     request = {
         "id": request_id,
         "method": "pane.report_agent_session",
