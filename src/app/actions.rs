@@ -1570,14 +1570,16 @@ impl AppState {
                 seq,
                 session_ref,
                 session_start_source,
+                started_with_full_permissions,
             } => self
                 .update_terminal_state(pane_id, |terminal| {
-                    terminal.set_agent_session_ref_for_session_start(
+                    terminal.set_agent_session_ref_for_session_start_with_permissions(
                         source,
                         agent_label,
                         session_ref,
                         seq,
                         session_start_source,
+                        started_with_full_permissions,
                     )
                 })
                 .into_iter()
@@ -3522,6 +3524,7 @@ mod tests {
                     .to_string(),
             )
             .unwrap(),
+            started_with_full_permissions: false,
         });
         terminal.set_hook_authority(
             "herdr:pi".into(),
