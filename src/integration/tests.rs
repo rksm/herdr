@@ -2812,6 +2812,21 @@ fn bundled_integration_asset_versions_match_expected_versions() {
 }
 
 #[test]
+fn bundled_integration_assets_report_permission_mode() {
+    assert!(
+        CLAUDE_HOOK_ASSET.contains("permission_mode")
+            || CLAUDE_HOOK_ASSET.contains("--permission-mode")
+    );
+    assert!(
+        CODEX_HOOK_ASSET.contains("permission_mode")
+            || CODEX_HOOK_ASSET.contains("--permission-mode")
+    );
+    assert!(HERMES_PLUGIN_INIT_ASSET.contains("HERMES_YOLO_MODE"));
+    assert!(HERMES_PLUGIN_INIT_ASSET.contains("\"permission_mode\""));
+    assert!(HERMES_PLUGIN_INIT_ASSET.contains("\"bypassPermissions\""));
+}
+
+#[test]
 fn process_owned_integration_assets_do_not_report_release() {
     for (name, asset) in [
         ("pi", PI_EXTENSION_ASSET),

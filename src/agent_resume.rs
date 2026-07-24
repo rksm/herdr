@@ -30,6 +30,7 @@ pub struct PersistedAgentSession {
     pub source: String,
     pub agent: String,
     pub session_ref: AgentSessionRef,
+    pub started_with_full_permissions: bool,
 }
 
 impl AgentSessionRef {
@@ -84,6 +85,7 @@ pub fn persisted_session_from_launch_args(
         source: "herdr:codex".into(),
         agent: "codex".into(),
         session_ref: AgentSessionRef::id(session_id.clone())?,
+        started_with_full_permissions: false,
     })
 }
 
@@ -95,6 +97,19 @@ pub fn normalize_session_start_source(value: Option<String>) -> Option<String> {
         ) => Some(source.to_string()),
         _ => None,
     }
+}
+
+pub fn started_with_full_permissions(
+    source: &str,
+    agent: &str,
+    permission_mode: Option<&str>,
+) -> bool {
+    matches!(
+        (source, agent, permission_mode),
+        ("herdr:claude", "claude", Some("bypassPermissions"))
+            | ("herdr:codex", "codex", Some("bypassPermissions"))
+            | ("herdr:hermes", "hermes", Some("bypassPermissions"))
+    )
 }
 
 pub fn is_reserved_native_state_source(source: &str, agent: &str) -> bool {
@@ -117,6 +132,7 @@ pub fn session_ref_from_snapshot(
     agent: &str,
     kind: AgentSessionRefKind,
     value: &str,
+    started_with_full_permissions: bool,
 ) -> Option<PersistedAgentSession> {
     if !is_official_agent_source(source, agent) {
         return None;
@@ -130,24 +146,43 @@ pub fn session_ref_from_snapshot(
         source: source.to_string(),
         agent: agent.to_string(),
         session_ref,
+        started_with_full_permissions,
     })
 }
 
 pub fn plan(source: &str, agent: &str, session_ref: &AgentSessionRef) -> Option<AgentResumePlan> {
+    plan_with_full_permissions(source, agent, session_ref, false)
+}
+
+pub fn plan_with_full_permissions(
+    source: &str,
+    agent: &str,
+    session_ref: &AgentSessionRef,
+    started_with_full_permissions: bool,
+) -> Option<AgentResumePlan> {
     if !is_official_agent_source(source, agent) {
         return None;
     }
 
     let argv = match (source, agent, session_ref.kind) {
         ("herdr:claude", "claude", AgentSessionRefKind::Id) => {
-            vec![
+            let mut argv = vec![
                 "claude".into(),
                 "--resume".into(),
                 session_ref.value.clone(),
-            ]
+            ];
+            if started_with_full_permissions {
+                argv.push("--dangerously-skip-permissions".into());
+            }
+            argv
         }
         ("herdr:codex", "codex", AgentSessionRefKind::Id) => {
-            vec!["codex".into(), "resume".into(), session_ref.value.clone()]
+            let mut argv = vec!["codex".into(), "resume".into()];
+            if started_with_full_permissions {
+                argv.push("--yolo".into());
+            }
+            argv.push(session_ref.value.clone());
+            argv
         }
         ("herdr:copilot", "copilot", AgentSessionRefKind::Id) => {
             vec!["copilot".into(), format!("--resume={}", session_ref.value)]
@@ -177,11 +212,15 @@ pub fn plan(source: &str, agent: &str, session_ref: &AgentSessionRef) -> Option<
             vec!["omp".into(), format!("--resume={}", session_ref.value)]
         }
         ("herdr:hermes", "hermes", AgentSessionRefKind::Id) => {
-            vec![
+            let mut argv = vec![
                 "hermes".into(),
                 "--resume".into(),
                 session_ref.value.clone(),
-            ]
+            ];
+            if started_with_full_permissions {
+                argv.push("--yolo".into());
+            }
+            argv
         }
         ("herdr:opencode", "opencode", AgentSessionRefKind::Id) => {
             vec![
@@ -302,16 +341,13 @@ mod tests {
 
     #[test]
     fn codex_noncanonical_resume_launch_has_no_explicit_session() {
-        assert_eq!(
-            persisted_session_from_launch_args(
-                crate::detect::Agent::Codex,
-                &["resume".into(), "codex-session".into()]
-            )
-            .unwrap()
-            .session_ref
-            .value,
-            "codex-session"
-        );
+        let session = persisted_session_from_launch_args(
+            crate::detect::Agent::Codex,
+            &["resume".into(), "codex-session".into()],
+        )
+        .unwrap();
+        assert_eq!(session.session_ref.value, "codex-session");
+        assert!(!session.started_with_full_permissions);
         assert!(persisted_session_from_launch_args(
             crate::detect::Agent::Codex,
             &["resume".into(), "--last".into()]
@@ -698,6 +734,80 @@ mod tests {
     }
 
     #[test]
+    fn full_permissions_are_normalized_for_supported_official_reports() {
+        assert!(started_with_full_permissions(
+            "herdr:claude",
+            "claude",
+            Some("bypassPermissions")
+        ));
+        assert!(started_with_full_permissions(
+            "herdr:codex",
+            "codex",
+            Some("bypassPermissions")
+        ));
+        assert!(started_with_full_permissions(
+            "herdr:hermes",
+            "hermes",
+            Some("bypassPermissions")
+        ));
+        assert!(!started_with_full_permissions(
+            "herdr:claude",
+            "claude",
+            Some("default")
+        ));
+        assert!(!started_with_full_permissions(
+            "custom:claude",
+            "claude",
+            Some("bypassPermissions")
+        ));
+        assert!(!started_with_full_permissions(
+            "herdr:copilot",
+            "copilot",
+            Some("bypassPermissions")
+        ));
+        assert!(!started_with_full_permissions("herdr:codex", "codex", None));
+    }
+
+    #[test]
+    fn planner_restores_full_permissions_for_supported_agents() {
+        let claude_session = AgentSessionRef::id("claude-session").unwrap();
+        let codex_session = AgentSessionRef::id("codex-session").unwrap();
+        let hermes_session = AgentSessionRef::id("hermes-session").unwrap();
+
+        assert_eq!(
+            plan_with_full_permissions("herdr:claude", "claude", &claude_session, true)
+                .unwrap()
+                .argv,
+            vec![
+                "claude",
+                "--resume",
+                "claude-session",
+                "--dangerously-skip-permissions"
+            ]
+        );
+        assert_eq!(
+            plan_with_full_permissions("herdr:codex", "codex", &codex_session, true)
+                .unwrap()
+                .argv,
+            vec!["codex", "resume", "--yolo", "codex-session"]
+        );
+        assert_eq!(
+            plan_with_full_permissions("herdr:hermes", "hermes", &hermes_session, true)
+                .unwrap()
+                .argv,
+            vec!["hermes", "--resume", "hermes-session", "--yolo"]
+        );
+        assert_eq!(
+            plan("herdr:claude", "claude", &claude_session)
+                .unwrap()
+                .dedupe_key,
+            plan_with_full_permissions("herdr:claude", "claude", &claude_session, true)
+                .unwrap()
+                .dedupe_key
+        );
+    }
+
+    #[test]
     fn ids_are_data_not_shell_text() {
         let id = "abc; rm -rf /";
         let codex_plan = plan("herdr:codex", "codex", &AgentSessionRef::id(id).unwrap()).unwrap();
@@ -756,49 +866,56 @@ mod tests {
             "herdr:mastracode",
             "mastracode",
             AgentSessionRefKind::Id,
-            "mastracode-session"
+            "mastracode-session",
+            false
         )
         .is_some());
         assert!(session_ref_from_snapshot(
             "herdr:hermes",
             "hermes",
             AgentSessionRefKind::Id,
-            "hermes-session"
+            "hermes-session",
+            false
         )
         .is_some());
         assert!(session_ref_from_snapshot(
             "herdr:opencode",
             "opencode",
             AgentSessionRefKind::Id,
-            "opencode-session"
+            "opencode-session",
+            false
         )
         .is_some());
         assert!(session_ref_from_snapshot(
             "herdr:kilo",
             "kilo",
             AgentSessionRefKind::Id,
-            "kilo-session"
+            "kilo-session",
+            false
         )
         .is_some());
         assert!(session_ref_from_snapshot(
             "herdr:copilot",
             "copilot",
             AgentSessionRefKind::Id,
-            "copilot-session"
+            "copilot-session",
+            false
         )
         .is_some());
         assert!(session_ref_from_snapshot(
             "herdr:devin",
             "devin",
             AgentSessionRefKind::Id,
-            "devin-session"
+            "devin-session",
+            false
         )
         .is_some());
         assert!(session_ref_from_snapshot(
             "herdr:antigravity_cli",
             "agy",
             AgentSessionRefKind::Id,
-            "agy-session"
+            "agy-session",
+            false
         )
         .is_some());
         let agy_session = absolute_test_path("agy-session");

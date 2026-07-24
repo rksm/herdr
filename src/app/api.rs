@@ -2224,6 +2224,7 @@ mod tests {
             agent: "codex".into(),
             session_ref: crate::agent_resume::AgentSessionRef::id("codex-session")
                 .expect("test session id should be valid"),
+            started_with_full_permissions: false,
         });
 
         app.handle_internal_event(AppEvent::PaneDied { pane_id });

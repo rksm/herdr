@@ -142,12 +142,13 @@ fn claude_hook_keeps_parent_agent_type_only_blocked() {
 fn claude_hook_reports_session_id_from_stdin() {
     let request = run_claude_hook(
         "session",
-        r#"{"hook_event_name":"SessionStart","session_id":"claude-session"}"#,
+        r#"{"hook_event_name":"SessionStart","session_id":"claude-session","permission_mode":"bypassPermissions"}"#,
     )
     .expect("session start should report session identity");
 
     assert_eq!(request["method"], "pane.report_agent_session");
     assert_eq!(request["params"]["agent_session_id"], "claude-session");
+    assert_eq!(request["params"]["permission_mode"], "bypassPermissions");
     assert!(request["params"].get("state").is_none());
 }
 
@@ -180,12 +181,13 @@ fn claude_hook_ignores_cursor_compatibility_payloads() {
 fn codex_hook_reports_persisted_root_session_and_ignores_ephemeral_or_nested_sessions() {
     let request = run_codex_hook(
         "session",
-        r#"{"hook_event_name":"SessionStart","session_id":"codex-session","transcript_path":"/tmp/codex-session.jsonl"}"#,
+        r#"{"hook_event_name":"SessionStart","session_id":"codex-session","transcript_path":"/tmp/codex-session.jsonl","permission_mode":"bypassPermissions"}"#,
     )
     .expect("codex hook should report session identity");
 
     assert_eq!(request["method"], "pane.report_agent_session");
     assert_eq!(request["params"]["agent_session_id"], "codex-session");
+    assert_eq!(request["params"]["permission_mode"], "bypassPermissions");
     assert!(request["params"].get("state").is_none());
 
     let matching_request = run_shell_hook_with_env(
