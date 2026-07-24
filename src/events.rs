@@ -119,6 +119,7 @@ pub enum AppEvent {
         seq: Option<u64>,
         session_ref: Option<crate::agent_resume::AgentSessionRef>,
         session_start_source: Option<String>,
+        started_with_full_permissions: bool,
     },
     /// A reporter supplied the command that resumes its own session.
     AgentResumeReported {

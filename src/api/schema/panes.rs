@@ -436,6 +436,8 @@ crate::cli::projection::cli_params! {
         pub agent_session_path: Option<String> => Field::new(None).input(binding::optional_text("agent-session-path", "PATH").path()),
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub session_start_source: Option<String> => Field::new(None).input(binding::optional_text("session-start-source", "SOURCE")),
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub permission_mode: Option<String> => Field::new(None).input(binding::optional_text("permission-mode", "MODE")),
         /// Command that resumes this agent's session after a Herdr restart. The
         /// first element must be a plain command name.
         #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -972,7 +972,13 @@ fn install_claude_writes_hook_and_updates_settings() {
         .as_str()
         .unwrap()
         .contains(" session"));
-    assert!(settings["hooks"].get("UserPromptSubmit").is_none());
+    assert!(settings["hooks"]["UserPromptSubmit"][0]
+        .get("matcher")
+        .is_none());
+    assert_eq!(
+        settings["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"],
+        settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+    );
     assert!(settings["hooks"].get("PreToolUse").is_none());
     assert!(settings["hooks"].get("PermissionRequest").is_none());
     assert!(settings["hooks"].get("PostToolUse").is_none());
@@ -1024,7 +1030,13 @@ fn install_claude_is_idempotent_for_hook_entries() {
         settings["hooks"]["SessionStart"].as_array().unwrap().len(),
         1
     );
-    assert!(settings["hooks"].get("UserPromptSubmit").is_none());
+    assert_eq!(
+        settings["hooks"]["UserPromptSubmit"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
     assert!(settings["hooks"].get("PreToolUse").is_none());
     assert!(settings["hooks"].get("PermissionRequest").is_none());
     assert!(settings["hooks"].get("PostToolUse").is_none());
@@ -1106,7 +1118,12 @@ fn install_claude_removes_deprecated_completion_hooks_and_preserves_user_hooks()
         settings["hooks"]["SessionEnd"][0]["hooks"][0]["command"],
         "echo keep-session-end"
     );
-    assert!(settings["hooks"].get("UserPromptSubmit").is_none());
+    assert!(
+        settings["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap()
+            .contains(" session")
+    );
     assert!(settings["hooks"].get("PreToolUse").is_none());
     assert!(settings["hooks"].get("Stop").is_none());
 
@@ -3778,6 +3795,21 @@ fn bundled_integration_asset_versions_match_expected_versions() {
             "{name} asset version must match its integration version constant"
         );
     }
+}
+
+#[test]
+fn bundled_integration_assets_report_permission_mode() {
+    assert!(
+        CLAUDE_HOOK_ASSET.contains("permission_mode")
+            || CLAUDE_HOOK_ASSET.contains("--permission-mode")
+    );
+    assert!(
+        CODEX_HOOK_ASSET.contains("permission_mode")
+            || CODEX_HOOK_ASSET.contains("--permission-mode")
+    );
+    assert!(HERMES_PLUGIN_INIT_ASSET.contains("HERMES_YOLO_MODE"));
+    assert!(HERMES_PLUGIN_INIT_ASSET.contains("\"--permission-mode\""));
+    assert!(HERMES_PLUGIN_INIT_ASSET.contains("\"bypassPermissions\""));
 }
 
 #[test]

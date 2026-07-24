@@ -22,11 +22,14 @@ try {
 
 $propertyNames = @($payload.PSObject.Properties.Name)
 if ((Test-Path Env:CURSOR_VERSION) -or $propertyNames -ccontains "cursor_version") { exit 0 }
-if (-not ($propertyNames -ccontains "hook_event_name") -or $payload.hook_event_name -isnot [string] -or $payload.hook_event_name -cne "SessionStart") { exit 0 }
+if (-not ($propertyNames -ccontains "hook_event_name") -or $payload.hook_event_name -isnot [string] -or $payload.hook_event_name -cnotin @("SessionStart", "UserPromptSubmit")) { exit 0 }
 if (-not [string]::IsNullOrWhiteSpace($payload.agent_id)) { exit 0 }
 
 $sessionId = $payload.session_id
 if ([string]::IsNullOrWhiteSpace($sessionId)) { exit 0 }
+$permissionMode = if ($payload.permission_mode -is [string] -and -not [string]::IsNullOrWhiteSpace($payload.permission_mode)) { "$($payload.permission_mode)" } else { $null }
+# Claude Code reports its permission mode on prompts, not on session start.
+if ($payload.hook_event_name -ceq "UserPromptSubmit" -and $null -eq $permissionMode) { exit 0 }
 
 $seq = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 $herdr = if ([string]::IsNullOrWhiteSpace($env:HERDR_BIN_PATH)) { "herdr" } else { $env:HERDR_BIN_PATH }
@@ -49,6 +52,9 @@ try {
     }
     if ($payload.hook_event_name -eq "SessionStart" -and $payload.source -is [string] -and -not [string]::IsNullOrWhiteSpace($payload.source)) {
         $args += @("--session-start-source", "$($payload.source)")
+    }
+    if ($null -ne $permissionMode) {
+        $args += @("--permission-mode", $permissionMode)
     }
     & $herdr @args 2>$null | Out-Null
 } catch {
