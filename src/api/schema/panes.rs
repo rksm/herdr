@@ -395,6 +395,8 @@ pub struct PaneReportAgentSessionParams {
     /// first element must be a plain command name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume_argv: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permission_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

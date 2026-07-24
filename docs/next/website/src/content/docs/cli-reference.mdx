@@ -288,6 +288,7 @@ herdr pane report-agent-session <pane_id> \
   [--agent-session-id ID] \
   [--agent-session-path PATH] \
   [--session-start-source SOURCE] \
+  [--permission-mode MODE] \
   [-- RESUME_COMMAND...]
 
 herdr pane release-agent <pane_id> \
@@ -296,7 +297,7 @@ herdr pane release-agent <pane_id> \
   [--seq N]
 ```
 
-`report-agent-session` updates native session identity without reporting lifecycle state. `release-agent` ends that source's lifecycle authority when its agent process exits.
+`report-agent-session` updates native session identity without reporting lifecycle state. Official Claude Code and Codex hooks use `--permission-mode bypassPermissions` on session-start reports so Herdr can preserve full-permission startup mode during native restore. `release-agent` ends that source's lifecycle authority when its agent process exits.
 
 Arguments after `--` are the command Herdr runs to resume this session after a server restart. The first argument must be a plain command name on `PATH`, and no argument may contain an apostrophe.
 

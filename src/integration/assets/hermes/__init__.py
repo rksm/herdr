@@ -40,6 +40,8 @@ def _send_session(session_id: str, start_source: str) -> None:
         "--session-start-source",
         start_source,
     ]
+    if _started_with_full_permissions():
+        command.extend(["--permission-mode", "bypassPermissions"])
     try:
         kwargs = {"timeout": 1, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
         if os.name == "nt":
@@ -47,6 +49,15 @@ def _send_session(session_id: str, start_source: str) -> None:
         subprocess.run(command, check=False, **kwargs)
     except Exception:
         pass
+
+
+def _started_with_full_permissions() -> bool:
+    return os.environ.get("HERMES_YOLO_MODE", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def _report_session(start_source: str, **kwargs) -> None:
