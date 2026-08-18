@@ -1,8 +1,8 @@
 use crate::api::schema::{
     EmptyParams, Method, PaneFocusDirectionParams, PaneInputSetParams, PaneMoveParams,
     PaneRenameParams, PaneResizeParams, PaneSplitParams, PaneSwapParams, PaneTarget,
-    PaneZoomParams, Request, TabCreateParams, TabListParams, TabRenameParams, TabTarget,
-    WorkspaceCloseParams, WorkspaceCreateParams, WorkspaceRenameParams, WorkspaceTarget,
+    PaneZoomParams, Request, TabCreateParams, TabListParams, TabMarkSetParams, TabRenameParams,
+    TabTarget, WorkspaceCloseParams, WorkspaceCreateParams, WorkspaceRenameParams, WorkspaceTarget,
     WorktreeCreateParams, WorktreeListParams, WorktreeOpenParams, WorktreeRemoveParams,
 };
 
@@ -64,6 +64,10 @@ pub(super) fn tab_focus(tab_id: String) -> std::io::Result<i32> {
 
 pub(super) fn tab_rename(params: TabRenameParams) -> std::io::Result<i32> {
     print_method_response("cli:tab:rename", Method::TabRename(params))
+}
+
+pub(super) fn tab_mark_set(params: TabMarkSetParams) -> std::io::Result<i32> {
+    print_method_response("cli:tab:mark:set", Method::TabMarkSet(params))
 }
 
 pub(super) fn tab_close(tab_id: String) -> std::io::Result<i32> {
