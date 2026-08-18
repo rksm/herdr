@@ -286,6 +286,7 @@ pub(super) fn navigator_rows(
         Some(ClientNavigatorFilter::Working) => status == crate::api::schema::AgentStatus::Working,
         Some(ClientNavigatorFilter::Idle) => status == crate::api::schema::AgentStatus::Idle,
         Some(ClientNavigatorFilter::Done) => status == crate::api::schema::AgentStatus::Done,
+        Some(ClientNavigatorFilter::Marked) => false,
         None => true,
     };
     let words = query.split_whitespace().collect::<Vec<_>>();
@@ -297,6 +298,7 @@ pub(super) fn navigator_rows(
         words.iter().all(|word| value.contains(word))
     };
     let filtering = navigator.filter.is_some() || !query.is_empty();
+    let marked_filter = matches!(navigator.filter, Some(ClientNavigatorFilter::Marked));
     let federated = endpoints.len() > 1;
     let depth_offset = u8::from(federated);
     let mut rows = Vec::new();
@@ -344,6 +346,25 @@ pub(super) fn navigator_rows(
                         .get(tab.tab_id.as_str())
                         .map(Vec::as_slice)
                         .unwrap_or_default();
+                    if marked_filter {
+                        if tab.marked && tab_matches {
+                            children.push(ClientNavigatorRow {
+                                depth: 1 + depth_offset,
+                                label: format!("★ {}", tab.label),
+                                meta: format!("{} panes", tab_panes.len()),
+                                detail: workspace.label.clone(),
+                                agent: None,
+                                status: None,
+                                stale,
+                                current: false,
+                                target: ClientNavigatorTarget::Tab {
+                                    endpoint_id: endpoint.endpoint_id.clone(),
+                                    tab_id: tab.tab_id.clone(),
+                                },
+                            });
+                        }
+                        continue;
+                    }
                     for (index, pane) in tab_panes.iter().enumerate() {
                         let agent = agents.get(pane.pane_id.as_str()).copied();
                         let status = agent
@@ -470,6 +491,10 @@ pub(super) fn navigator_selected_index(
 ) -> Option<usize> {
     match navigator.selected.as_ref() {
         Some(target) => rows.iter().position(|row| row.target == *target),
+        None if matches!(navigator.filter, Some(ClientNavigatorFilter::Marked)) => rows
+            .iter()
+            .position(|row| matches!(row.target, ClientNavigatorTarget::Tab { .. }))
+            .or_else(|| (!rows.is_empty()).then_some(0)),
         None => rows
             .iter()
             .position(|row| matches!(row.target, ClientNavigatorTarget::Pane { .. }))
