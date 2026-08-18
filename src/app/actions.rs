@@ -520,6 +520,23 @@ impl AppState {
         }
     }
 
+    pub(crate) fn set_tab_marked(&mut self, ws_idx: usize, tab_idx: usize, marked: bool) -> bool {
+        let Some(tab) = self
+            .workspaces
+            .get_mut(ws_idx)
+            .and_then(|workspace| workspace.tabs.get_mut(tab_idx))
+        else {
+            return false;
+        };
+        if tab.marked == marked {
+            return false;
+        }
+
+        tab.marked = marked;
+        self.mark_session_dirty();
+        true
+    }
+
     pub(crate) fn mark_active_tab_seen(&mut self) -> bool {
         let Some(ws_idx) = self.active else {
             return false;

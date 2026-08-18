@@ -30,6 +30,7 @@
 ## [0.8.2] - 2026-08-19
 
 ### Added
+- Tabs now support persistent marks for later attention. Toggle a mark with `prefix+m`, the tab menu, the mobile switcher, `herdr tab mark`, or `tab.mark.set`. Marks survive restarts. Tab, Agent, and Space entries show the mark, and the navigator `m` filter lists marked tabs.
 - CLI help now points coding agents to Herdr's plain-text guide, documentation index, and built-in control skill.
 - Added Qwen Code detection for idle, working, and user-confirmation states, plus optional native session restore. (#2730, #2743)
 - Herdr now keeps the outer terminal window title in sync with the session through `ui.window_title`, so window managers and terminal tab bars show the active workspace and the host the panes actually run on. (#2627, thanks @dhh)

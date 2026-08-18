@@ -162,6 +162,7 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # remote_image_paste = "ctrl+v" # only active in herdr --remote; empty disables raw-key image paste
 # new_tab = "prefix+c"
 # rename_tab = "prefix+shift+t"
+# toggle_tab_mark = "prefix+m"
 # previous_tab = "prefix+p"
 # next_tab = "prefix+n"
 # move_tab_previous = ""   # optional, e.g. "alt+shift+left" moves the tab toward the front

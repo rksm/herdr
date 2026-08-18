@@ -9,6 +9,7 @@ fn tab_overflow_controls_scroll_the_client_owned_tab_bar() {
         number,
         label: number.to_string(),
         custom_label: false,
+        marked: false,
         zoomed: false,
         focused: false,
         agent_status: AgentStatus::Idle,
@@ -91,6 +92,62 @@ fn focused_workspace_change_reveals_new_workspace_in_full_sidebar() {
         .workspaces
         .iter()
         .any(|hit| hit.workspace_id == "ws_12"));
+}
+
+#[test]
+fn marked_tab_renders_and_toggles_through_client_shell() {
+    let mut projected = snapshot();
+    projected.tabs[0].marked = true;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+
+    let frame = state.compose(106, 20).expect("marked tab frame");
+    let text = frame
+        .cells
+        .chunks(frame.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(text.contains("★ 1"));
+
+    let mut keybinding = ClientShellInput::default();
+    state.record_binding(
+        crate::input::KeybindMatch::Action(crate::input::KeybindAction::ToggleTabMark),
+        &mut keybinding,
+    );
+    let [ClientShellAction::Endpoint { request, .. }] = &keybinding.actions[..] else {
+        panic!("toggle tab mark keybinding should use endpoint API");
+    };
+    assert!(matches!(
+        &request.method,
+        crate::api::schema::Method::TabMarkSet(params)
+            if params.tab_id == "tab_1" && !params.marked
+    ));
+
+    state.open_tab_context_menu("tab_1".into(), 0, 0);
+    let mark_index = match state.overlay.as_ref() {
+        Some(ClientShellOverlay::ContextMenu(menu)) => menu
+            .items()
+            .iter()
+            .position(|item| item.label == "Clear mark")
+            .expect("clear mark item"),
+        _ => panic!("tab context menu"),
+    };
+    let mut context = ClientShellInput::default();
+    state.activate_context_menu_item(mark_index, &mut context);
+    let [ClientShellAction::Endpoint { request, .. }] = &context.actions[..] else {
+        panic!("tab mark context action should use endpoint API");
+    };
+    assert!(matches!(
+        &request.method,
+        crate::api::schema::Method::TabMarkSet(params)
+            if params.tab_id == "tab_1" && !params.marked
+    ));
 }
 
 #[test]

@@ -644,6 +644,12 @@
           "description": "Rename the active tab."
         },
         {
+          "key": "keys.toggle_tab_mark",
+          "type": "keybinding",
+          "default": "\"prefix+m\"",
+          "description": "Mark or unmark the active tab for later."
+        },
+        {
           "key": "keys.previous_tab",
           "type": "keybinding",
           "default": "\"prefix+p\"",

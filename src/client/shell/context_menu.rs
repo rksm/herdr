@@ -41,9 +41,17 @@ impl ClientContextMenuOverlay {
                     Action::ToggleGroup,
                 ),
             ],
-            ClientContextMenuTarget::Tab { .. } => vec![
+            ClientContextMenuTarget::Tab { marked, .. } => vec![
                 item("New tab", Action::NewTab),
                 item("Rename", Action::Rename),
+                item(
+                    if *marked {
+                        "Clear mark"
+                    } else {
+                        "Mark for later"
+                    },
+                    Action::ToggleTabMark,
+                ),
                 item("Close", Action::Close),
             ],
             ClientContextMenuTarget::Pane {
@@ -134,6 +142,7 @@ impl ClientShellState {
             target: ClientContextMenuTarget::Tab {
                 tab_id,
                 workspace_id: tab.workspace_id.clone(),
+                marked: tab.marked,
             },
             x,
             y,
@@ -197,7 +206,8 @@ impl ClientShellState {
             ClientContextMenuTarget::Tab {
                 tab_id,
                 workspace_id,
-            } => self.activate_tab_context_action(tab_id, workspace_id, action, outcome),
+                marked,
+            } => self.activate_tab_context_action(tab_id, workspace_id, marked, action, outcome),
             ClientContextMenuTarget::Pane {
                 pane_id,
                 workspace_id,
@@ -293,17 +303,20 @@ impl ClientShellState {
         &mut self,
         tab_id: String,
         workspace_id: String,
+        marked: bool,
         action: ClientContextMenuAction,
         outcome: &mut ClientShellInput,
     ) {
-        use crate::api::schema::{Method, TabTarget};
+        use crate::api::schema::{Method, TabMarkSetParams, TabTarget};
 
-        self.push_endpoint_method(
-            Method::TabFocus(TabTarget {
-                tab_id: tab_id.clone(),
-            }),
-            outcome,
-        );
+        if action != ClientContextMenuAction::ToggleTabMark {
+            self.push_endpoint_method(
+                Method::TabFocus(TabTarget {
+                    tab_id: tab_id.clone(),
+                }),
+                outcome,
+            );
+        }
         match action {
             ClientContextMenuAction::NewTab => {
                 if self.config.prompt_new_tab_name {
@@ -362,6 +375,15 @@ impl ClientShellState {
             }
             ClientContextMenuAction::Close => {
                 self.push_endpoint_method(Method::TabClose(TabTarget { tab_id }), outcome);
+            }
+            ClientContextMenuAction::ToggleTabMark => {
+                self.push_endpoint_method(
+                    Method::TabMarkSet(TabMarkSetParams {
+                        tab_id,
+                        marked: !marked,
+                    }),
+                    outcome,
+                );
             }
             _ => {}
         }

@@ -46,6 +46,7 @@ pub(super) fn snapshot() -> ClientShellSnapshot {
             number: 1,
             label: "1".into(),
             custom_label: false,
+            marked: false,
             zoomed: false,
             focused: true,
             agent_status: AgentStatus::Idle,

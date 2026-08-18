@@ -939,7 +939,7 @@ impl ClientShellState {
         use crate::api::schema::{
             Method, PaneDirection, PaneFocusDirectionParams, PaneResizeParams, PaneSplitParams,
             PaneSwapParams, PaneTarget, PaneZoomMode, PaneZoomParams, SplitDirection,
-            TabCreateParams, TabMoveParams, TabTarget, WorkspaceTarget,
+            TabCreateParams, TabMarkSetParams, TabMoveParams, TabTarget, WorkspaceTarget,
         };
         use crate::input::KeybindAction;
 
@@ -1099,6 +1099,18 @@ impl ClientShellState {
                     focus: true,
                     label: None,
                     env: Default::default(),
+                }))
+            }
+            KeybindAction::ToggleTabMark => {
+                let focused_tab = focused_tab?;
+                let marked = snapshot
+                    .tabs
+                    .iter()
+                    .find(|tab| tab.tab_id == focused_tab)?
+                    .marked;
+                Some(Method::TabMarkSet(TabMarkSetParams {
+                    tab_id: focused_tab,
+                    marked: !marked,
                 }))
             }
             KeybindAction::FocusPaneLeft

@@ -167,10 +167,13 @@ herdr tab create [--workspace <workspace_id>] [--cwd PATH] [--label TEXT] [--env
 herdr tab get <tab_id>
 herdr tab focus <tab_id>
 herdr tab rename <tab_id> <label>
+herdr tab mark <tab_id> [--clear]
 herdr tab close <tab_id>
 ```
 
 标签页是工作区内的另一个终端布局。不指定 `--workspace` 时,`tab create` 使用活动工作区;如果没有活动工作区则失败。JSON 响应中的 `.result.tab.tab_id` 和 `.result.root_pane.pane_id` 是对应 ID。
+
+`tab mark` 在不改变焦点的情况下标记稍后查看的标签页。添加 `--clear` 可清除标记。标记会在重启后保留，并且不会改变标签页的智能体状态或未读状态。
 
 创建工作区、标签页和拆分窗格默认不改变焦点。`--focus` 选择新布局;`--no-focus` 显式表达默认行为。不指定 `--cwd` 时,新终端遵循 `terminal.new_cwd` 设置,默认跟随来源窗格或工作区。每个 `--env KEY=VALUE` 在新的根 shell 中添加或替换一个环境变量。
 

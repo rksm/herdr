@@ -224,8 +224,14 @@ fn compact_tab_status(snapshot: &ClientShellSnapshot, workspace: &ClientShellWor
         .unwrap_or(0);
     let label = tabs
         .get(active)
-        .map(|tab| tab.label.as_str())
-        .unwrap_or("1");
+        .map(|tab| {
+            if tab.marked {
+                format!("★ {}", tab.label)
+            } else {
+                tab.label.clone()
+            }
+        })
+        .unwrap_or_else(|| "1".to_string());
     if tabs.len() <= 1 {
         format!("tab {label}")
     } else {
@@ -887,6 +893,11 @@ fn mobile_items(
                 format!("{} · {}", index + 1, tab.label)
             } else {
                 format!("tab {}", tab.label)
+            };
+            let label = if tab.marked {
+                format!("★ {label}")
+            } else {
+                label
             };
             let label = format!(
                 "  {}",

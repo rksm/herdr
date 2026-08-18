@@ -1039,6 +1039,8 @@ pub struct ClientShellTab {
     pub number: usize,
     pub label: String,
     pub custom_label: bool,
+    #[serde(default)]
+    pub marked: bool,
     pub zoomed: bool,
     pub focused: bool,
     #[serde(deserialize_with = "deserialize_client_shell_agent_status")]
@@ -2663,6 +2665,7 @@ mod tests {
                 number: 1,
                 label: "main".into(),
                 custom_label: true,
+                marked: false,
                 zoomed: false,
                 focused: true,
                 agent_status: crate::api::schema::AgentStatus::Idle,

@@ -425,6 +425,22 @@
             },
             {
               "properties": {
+                "tab": {
+                  "$ref": "#/schemas/event/$defs/TabInfo"
+                },
+                "type": {
+                  "const": "tab_mark_updated",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "tab"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
                 "tab_id": {
                   "type": "string"
                 },
@@ -743,6 +759,7 @@
             "tab_closed",
             "tab_renamed",
             "tab_moved",
+            "tab_mark_updated",
             "tab_focused",
             "pane_created",
             "pane_closed",
@@ -1039,6 +1056,9 @@
             },
             "label": {
               "type": "string"
+            },
+            "marked": {
+              "type": "boolean"
             },
             "number": {
               "format": "uint",
@@ -1929,6 +1949,28 @@
                 "event": {
                   "const": "tab_moved",
                   "type": "string"
+                },
+                "tab_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "tab_id"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "event": {
+                  "const": "tab_mark_updated",
+                  "type": "string"
+                },
+                "marked": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
                 },
                 "tab_id": {
                   "type": "string"
@@ -3050,6 +3092,12 @@
             "pane_id": {
               "type": "string"
             },
+            "permission_mode": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "seq": {
               "format": "uint64",
               "minimum": 0,
@@ -4163,6 +4211,18 @@
             {
               "properties": {
                 "type": {
+                  "const": "tab.mark_updated",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "type": {
                   "const": "pane.created",
                   "type": "string"
                 }
@@ -4378,6 +4438,21 @@
               ]
             }
           },
+          "type": "object"
+        },
+        "TabMarkSetParams": {
+          "properties": {
+            "marked": {
+              "type": "boolean"
+            },
+            "tab_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "tab_id",
+            "marked"
+          ],
           "type": "object"
         },
         "TabMoveParams": {
@@ -5267,6 +5342,22 @@
             },
             "params": {
               "$ref": "#/schemas/request/$defs/TabMoveParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "tab.mark.set",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/TabMarkSetParams"
             }
           },
           "required": [
@@ -7195,6 +7286,22 @@
             },
             {
               "properties": {
+                "tab": {
+                  "$ref": "#/schemas/success_response/$defs/TabInfo"
+                },
+                "type": {
+                  "const": "tab_mark_updated",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "tab"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
                 "tab_id": {
                   "type": "string"
                 },
@@ -7528,6 +7635,7 @@
             "tab_closed",
             "tab_renamed",
             "tab_moved",
+            "tab_mark_updated",
             "tab_focused",
             "pane_created",
             "pane_closed",
@@ -10644,6 +10752,9 @@
             },
             "label": {
               "type": "string"
+            },
+            "marked": {
+              "type": "boolean"
             },
             "number": {
               "format": "uint",

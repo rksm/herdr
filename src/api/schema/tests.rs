@@ -605,6 +605,55 @@ fn event_envelope_round_trips() {
 }
 
 #[test]
+fn tab_mark_request_event_and_match_round_trip() {
+    let request = Request {
+        id: "mark_1".into(),
+        method: Method::TabMarkSet(TabMarkSetParams {
+            tab_id: "w_1:2".into(),
+            marked: true,
+        }),
+    };
+    let json = serde_json::to_value(&request).unwrap();
+    assert_eq!(json["method"], "tab.mark.set");
+    assert_eq!(json["params"]["marked"], true);
+    assert_eq!(serde_json::from_value::<Request>(json).unwrap(), request);
+
+    let event = EventEnvelope {
+        event: EventKind::TabMarkUpdated,
+        data: EventData::TabMarkUpdated {
+            tab: TabInfo {
+                tab_id: "w_1:2".into(),
+                workspace_id: "w_1".into(),
+                number: 2,
+                label: "review".into(),
+                marked: true,
+                focused: false,
+                pane_count: 1,
+                agent_status: AgentStatus::Unknown,
+            },
+        },
+    };
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["event"], "tab_mark_updated");
+    assert_eq!(json["data"]["tab"]["marked"], true);
+    assert_eq!(
+        serde_json::from_value::<EventEnvelope>(json).unwrap(),
+        event
+    );
+
+    let event_match = EventMatch::TabMarkUpdated {
+        tab_id: "w_1:2".into(),
+        marked: Some(true),
+    };
+    let json = serde_json::to_value(&event_match).unwrap();
+    assert_eq!(json["event"], "tab_mark_updated");
+    assert_eq!(
+        serde_json::from_value::<EventMatch>(json).unwrap(),
+        event_match
+    );
+}
+
+#[test]
 fn subscribe_request_parses_parameterized_subscriptions() {
     let json = r#"
     {
@@ -814,6 +863,7 @@ fn worktree_request_and_response_round_trip() {
                 workspace_id: "w_1".into(),
                 number: 1,
                 label: "herdr".into(),
+                marked: false,
                 focused: true,
                 pane_count: 1,
                 agent_status: AgentStatus::Unknown,
@@ -1242,6 +1292,7 @@ fn create_response_round_trips_with_root_pane() {
                 workspace_id: "w_1".into(),
                 number: 2,
                 label: "review".into(),
+                marked: false,
                 focused: false,
                 pane_count: 1,
                 agent_status: AgentStatus::Unknown,

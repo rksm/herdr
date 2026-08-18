@@ -109,10 +109,12 @@ pub(super) fn navigator_rows(
         Some(ClientNavigatorFilter::Working) => status == crate::api::schema::AgentStatus::Working,
         Some(ClientNavigatorFilter::Idle) => status == crate::api::schema::AgentStatus::Idle,
         Some(ClientNavigatorFilter::Done) => status == crate::api::schema::AgentStatus::Done,
+        Some(ClientNavigatorFilter::Marked) => false,
         None => true,
     };
     let text = |value: &str| query.is_empty() || value.to_lowercase().contains(&query);
     let filtering = navigator.filter.is_some() || !query.is_empty();
+    let marked_filter = matches!(navigator.filter, Some(ClientNavigatorFilter::Marked));
     let federated = endpoints.len() > 1;
     let depth_offset = u8::from(federated);
     let mut rows = Vec::new();
@@ -131,58 +133,68 @@ pub(super) fn navigator_rows(
                     .filter(|tab| tab.workspace_id == workspace.workspace_id)
                 {
                     let mut panes = Vec::new();
-                    for (index, pane) in snapshot
-                        .panes
-                        .iter()
-                        .filter(|pane| pane.tab_id == tab.tab_id)
-                        .enumerate()
-                    {
-                        let agent = snapshot
-                            .agents
+                    if !marked_filter {
+                        for (index, pane) in snapshot
+                            .panes
                             .iter()
-                            .find(|agent| agent.pane_id == pane.pane_id);
-                        let status = agent
-                            .map_or(crate::api::schema::AgentStatus::Unknown, |agent| {
-                                agent.agent_status
-                            });
-                        let label = pane
-                            .label
-                            .clone()
-                            .or_else(|| agent.and_then(|agent| agent.name.clone()))
-                            .or_else(|| agent.and_then(|agent| agent.display_agent.clone()))
-                            .or_else(|| agent.and_then(|agent| agent.title.clone()))
-                            .unwrap_or_else(|| format!("pane {}", index + 1));
-                        let meta = pane
-                            .foreground_cwd
-                            .clone()
-                            .or_else(|| pane.cwd.clone())
-                            .unwrap_or_default();
-                        if !filtering
-                            || filter(status)
-                                && (endpoint_query_matches || text(&label) || text(&meta))
+                            .filter(|pane| pane.tab_id == tab.tab_id)
+                            .enumerate()
                         {
-                            panes.push(ClientNavigatorRow {
-                                depth: 2 + depth_offset,
-                                label,
-                                meta,
-                                status: Some(status),
-                                stale,
-                                current: endpoint.endpoint_id == *active_endpoint_id
-                                    && snapshot.focused_pane_id.as_deref() == Some(&pane.pane_id),
-                                target: ClientNavigatorTarget::Pane {
-                                    endpoint_id: endpoint.endpoint_id.clone(),
-                                    pane_id: pane.pane_id.clone(),
-                                },
-                            });
+                            let agent = snapshot
+                                .agents
+                                .iter()
+                                .find(|agent| agent.pane_id == pane.pane_id);
+                            let status = agent
+                                .map_or(crate::api::schema::AgentStatus::Unknown, |agent| {
+                                    agent.agent_status
+                                });
+                            let label = pane
+                                .label
+                                .clone()
+                                .or_else(|| agent.and_then(|agent| agent.name.clone()))
+                                .or_else(|| agent.and_then(|agent| agent.display_agent.clone()))
+                                .or_else(|| agent.and_then(|agent| agent.title.clone()))
+                                .unwrap_or_else(|| format!("pane {}", index + 1));
+                            let meta = pane
+                                .foreground_cwd
+                                .clone()
+                                .or_else(|| pane.cwd.clone())
+                                .unwrap_or_default();
+                            if !filtering
+                                || filter(status)
+                                    && (endpoint_query_matches || text(&label) || text(&meta))
+                            {
+                                panes.push(ClientNavigatorRow {
+                                    depth: 2 + depth_offset,
+                                    label,
+                                    meta,
+                                    status: Some(status),
+                                    stale,
+                                    current: endpoint.endpoint_id == *active_endpoint_id
+                                        && snapshot.focused_pane_id.as_deref()
+                                            == Some(&pane.pane_id),
+                                    target: ClientNavigatorTarget::Pane {
+                                        endpoint_id: endpoint.endpoint_id.clone(),
+                                        pane_id: pane.pane_id.clone(),
+                                    },
+                                });
+                            }
                         }
                     }
                     if !filtering
+                        || marked_filter
+                            && tab.marked
+                            && (endpoint_query_matches || text(&tab.label))
                         || filter(tab.agent_status) && (endpoint_query_matches || text(&tab.label))
                         || !panes.is_empty()
                     {
                         children.push(ClientNavigatorRow {
                             depth: 1 + depth_offset,
-                            label: tab.label.clone(),
+                            label: if tab.marked {
+                                format!("★ {}", tab.label)
+                            } else {
+                                tab.label.clone()
+                            },
                             meta: format!(
                                 "{} panes",
                                 snapshot

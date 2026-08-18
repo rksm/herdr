@@ -1182,6 +1182,7 @@ impl Workspace {
         panes.insert(root_id, PaneState::new(terminal_id));
         let tab = Tab {
             custom_name: None,
+            marked: false,
             number: 1,
             root_pane: root_id,
             layout,
@@ -1238,6 +1239,7 @@ impl Workspace {
         panes.insert(root_id, PaneState::new(TerminalId::alloc()));
         let tab = Tab {
             custom_name: name.map(str::to_string),
+            marked: false,
             number: self.next_public_tab_number,
             root_pane: root_id,
             layout,
@@ -1652,6 +1654,7 @@ mod tests {
     fn moving_tab_keeps_active_identity_and_stable_tab_numbers() {
         let mut ws = Workspace::test_new("test");
         let moved_root = ws.tabs[0].root_pane;
+        ws.tabs[0].marked = true;
         ws.test_add_tab(Some("foo"));
         let final_auto_idx = ws.test_add_tab(None);
         let active_root = ws.tabs[final_auto_idx].root_pane;
@@ -1666,6 +1669,7 @@ mod tests {
         assert_eq!(ws.tabs[0].custom_name.as_deref(), Some("foo"));
         assert!(ws.tabs[1].custom_name.is_none());
         assert!(ws.tabs[2].custom_name.is_none());
+        assert!(ws.tabs[2].marked);
         assert_eq!(ws.tabs[0].number, 2);
         assert_eq!(ws.tabs[1].number, 3);
         assert_eq!(ws.tabs[2].number, 1);

@@ -292,6 +292,12 @@ fn tab_command() -> Command {
                 .arg(required("tab_id", "TAB_ID"))
                 .arg(required("label", "LABEL").num_args(1..)),
         )
+        .subcommand(
+            Command::new("mark")
+                .about("Mark a tab for later")
+                .arg(required("tab_id", "TAB_ID"))
+                .arg(flag("clear")),
+        )
         .subcommand(id_command("close", "tab_id", "Close a tab"))
 }
 

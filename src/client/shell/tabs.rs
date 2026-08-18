@@ -378,9 +378,14 @@ fn last_visible_tab(start: usize, widths: &[u16], available: u16) -> Option<usiz
 }
 
 fn tab_label(tab: &ClientShellTab) -> String {
-    if tab.zoomed {
-        format!("{} Z", tab.label)
+    let label = if tab.marked {
+        format!("★ {}", tab.label)
     } else {
         tab.label.clone()
+    };
+    if tab.zoomed {
+        format!("{label} Z")
+    } else {
+        label
     }
 }

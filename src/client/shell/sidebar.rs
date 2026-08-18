@@ -308,6 +308,7 @@ pub(crate) fn render_sidebar(
             rect,
             workspace,
             status,
+            workspace_has_marked_tab(snapshot, &workspace.workspace_id),
             config.status_indicators,
             entry,
             rows,
@@ -583,6 +584,16 @@ pub(super) fn displayed_workspace_status(
         .unwrap_or(workspace.agent_status)
 }
 
+pub(in crate::client::shell) fn workspace_has_marked_tab(
+    snapshot: &ClientShellSnapshot,
+    workspace_id: &str,
+) -> bool {
+    snapshot
+        .tabs
+        .iter()
+        .any(|tab| tab.workspace_id == workspace_id && tab.marked)
+}
+
 pub(in crate::client::shell) fn workspace_rows(
     workspace: &ClientShellWorkspace,
     status: crate::api::schema::AgentStatus,
@@ -617,6 +628,7 @@ pub(in crate::client::shell) fn render_workspace_rows(
     area: Rect,
     workspace: &ClientShellWorkspace,
     status: crate::api::schema::AgentStatus,
+    marked: bool,
     indicators: crate::config::StatusIndicatorStyle,
     entry: &WorkspaceEntry,
     rows: Vec<Vec<crate::ui::ResolvedToken>>,
@@ -673,6 +685,22 @@ pub(in crate::client::shell) fn render_workspace_rows(
         } else {
             palette.overlay0
         });
+        if marked && row_index == 0 && x < area.right() {
+            x = put_segment(
+                buffer,
+                x,
+                y,
+                area.right(),
+                "★ ",
+                Style::default()
+                    .fg(if workspace.focused {
+                        palette.text
+                    } else {
+                        palette.mauve
+                    })
+                    .add_modifier(Modifier::BOLD),
+            );
+        }
         let spans = crate::ui::resolved_token_spans(
             row,
             (

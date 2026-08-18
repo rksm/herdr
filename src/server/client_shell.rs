@@ -93,6 +93,7 @@ pub(super) fn snapshot(
                 number: tab.number,
                 label: tab.label,
                 custom_label: !state.is_auto_named(),
+                marked: state.marked,
                 zoomed: state.zoomed,
                 agent_status: tab.agent_status,
             }

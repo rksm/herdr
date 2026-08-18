@@ -14,6 +14,7 @@ pub(super) struct AgentRow {
     pub(super) pane_id: String,
     pub(super) status: crate::api::schema::AgentStatus,
     pub(super) focused: bool,
+    pub(super) marked: bool,
     pub(super) rows: Vec<Vec<crate::ui::ResolvedToken>>,
 }
 
@@ -305,6 +306,7 @@ pub(super) fn agent_rows(
                 pane_id: agent.pane_id.clone(),
                 status: agent.agent_status,
                 focused: agent.focused,
+                marked: tab.is_some_and(|tab| tab.marked),
                 rows,
             })
         })
@@ -357,6 +359,21 @@ pub(super) fn render_agent_row(
     for (index, tokens) in rows.iter().take(rect.height as usize).enumerate() {
         let indent = if index == 0 { 1 } else { 3 };
         let mut spans = vec![ratatui::text::Span::raw(" ".repeat(indent))];
+        let mark_width = if row.marked && index == 0 {
+            spans.push(ratatui::text::Span::styled(
+                "★ ",
+                Style::default()
+                    .fg(if row.focused {
+                        palette.text
+                    } else {
+                        palette.mauve
+                    })
+                    .add_modifier(Modifier::BOLD),
+            ));
+            2
+        } else {
+            0
+        };
         spans.extend(crate::ui::resolved_token_spans(
             tokens,
             icon,
@@ -365,7 +382,9 @@ pub(super) fn render_agent_row(
             secondary,
             secondary,
             palette,
-            rect.width.saturating_sub(indent as u16) as usize,
+            rect.width
+                .saturating_sub(indent as u16)
+                .saturating_sub(mark_width) as usize,
         ));
         Paragraph::new(Line::from(spans)).style(row_style).render(
             Rect::new(rect.x, rect.y + index as u16, rect.width, 1),
