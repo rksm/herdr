@@ -87,6 +87,8 @@ struct LegacyWorkspaceSnapshot {
 pub struct TabSnapshot {
     #[serde(default)]
     pub custom_name: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub marked: bool,
     pub layout: LayoutSnapshot,
     pub panes: HashMap<u32, PaneSnapshot>,
     pub zoomed: bool,
@@ -154,6 +156,7 @@ impl From<LegacyWorkspaceSnapshot> for WorkspaceSnapshot {
         let identity_cwd = legacy_identity_cwd(&snap);
         let tab = TabSnapshot {
             custom_name: None,
+            marked: false,
             layout: snap.layout,
             panes: snap.panes,
             zoomed: snap.zoomed,
@@ -393,6 +396,7 @@ fn capture_tab(
     }
     TabSnapshot {
         custom_name: tab.custom_name.clone(),
+        marked: tab.marked,
         layout: capture_node(tab.layout.root()),
         panes,
         zoomed: tab.zoomed,
@@ -732,6 +736,7 @@ mod tests {
                 next_public_tab_number: 2,
                 tabs: vec![TabSnapshot {
                     custom_name: Some("api".to_string()),
+                    marked: false,
                     layout: LayoutSnapshot::Split {
                         direction: DirectionSnapshot::Horizontal,
                         ratio: 0.5,
@@ -894,19 +899,22 @@ mod tests {
     }
 
     #[test]
-    fn capture_contract_tracks_workspace_and_tab_names_and_active_tab() {
+    fn capture_contract_tracks_workspace_tab_names_marks_and_active_tab() {
         let mut state = state_with_workspaces(&["one"]);
         state.workspaces[0].set_custom_name("renamed-workspace".into());
         let second_tab = state.workspaces[0].test_add_tab(Some("logs"));
         state.workspaces[0].switch_tab(second_tab);
         state.workspaces[0].tabs[0].set_custom_name("main".into());
+        state.workspaces[0].tabs[0].marked = true;
 
         let snapshot = capture_from_state(&state);
         let workspace = &snapshot.workspaces[0];
         assert_eq!(workspace.custom_name.as_deref(), Some("renamed-workspace"));
         assert_eq!(workspace.active_tab, second_tab);
         assert_eq!(workspace.tabs[0].custom_name.as_deref(), Some("main"));
+        assert!(workspace.tabs[0].marked);
         assert_eq!(workspace.tabs[1].custom_name.as_deref(), Some("logs"));
+        assert!(!workspace.tabs[1].marked);
     }
 
     #[test]
@@ -1401,6 +1409,20 @@ mod tests {
     }
 
     #[test]
+    fn tab_mark_defaults_to_false_in_older_snapshots() {
+        let json = r#"{
+            "custom_name":null,
+            "layout":{"Pane":0},
+            "panes":{},
+            "zoomed":false,
+            "focused":null,
+            "root_pane":null
+        }"#;
+        let tab: TabSnapshot = serde_json::from_str(json).unwrap();
+        assert!(!tab.marked);
+    }
+
+    #[test]
     fn snapshot_parsing_preserves_missing_cwd() {
         let mut panes = HashMap::new();
         panes.insert(
@@ -1441,6 +1463,7 @@ mod tests {
                 next_public_tab_number: 0,
                 tabs: vec![TabSnapshot {
                     custom_name: None,
+                    marked: false,
                     layout: LayoutSnapshot::Split {
                         direction: DirectionSnapshot::Horizontal,
                         ratio: 0.5,

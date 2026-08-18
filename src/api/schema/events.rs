@@ -48,6 +48,8 @@ pub enum Subscription {
     TabRenamed {},
     #[serde(rename = "tab.moved")]
     TabMoved {},
+    #[serde(rename = "tab.mark_updated")]
+    TabMarkUpdated {},
     #[serde(rename = "pane.created")]
     PaneCreated {},
     #[serde(rename = "pane.closed")]
@@ -152,6 +154,11 @@ pub enum EventMatch {
     TabMoved {
         tab_id: String,
     },
+    TabMarkUpdated {
+        tab_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        marked: Option<bool>,
+    },
     TabFocused {
         tab_id: String,
     },
@@ -207,6 +214,7 @@ pub enum EventKind {
     TabClosed,
     TabRenamed,
     TabMoved,
+    TabMarkUpdated,
     TabFocused,
     PaneCreated,
     PaneClosed,
@@ -238,6 +246,7 @@ impl EventKind {
             EventKind::TabClosed => "tab.closed",
             EventKind::TabRenamed => "tab.renamed",
             EventKind::TabMoved => "tab.moved",
+            EventKind::TabMarkUpdated => "tab.mark_updated",
             EventKind::TabFocused => "tab.focused",
             EventKind::PaneCreated => "pane.created",
             EventKind::PaneClosed => "pane.closed",
@@ -270,6 +279,7 @@ pub const KNOWN_EVENT_KINDS: &[EventKind] = &[
     EventKind::TabClosed,
     EventKind::TabRenamed,
     EventKind::TabMoved,
+    EventKind::TabMarkUpdated,
     EventKind::TabFocused,
     EventKind::PaneCreated,
     EventKind::PaneClosed,
@@ -485,6 +495,9 @@ pub enum EventData {
         workspace_id: String,
         insert_index: usize,
         tabs: Vec<TabInfo>,
+    },
+    TabMarkUpdated {
+        tab: TabInfo,
     },
     TabFocused {
         tab_id: String,

@@ -7521,6 +7521,7 @@ fn stale_api_agent_report_does_not_forward_done_sound() {
                     .to_string(),
             )
             .unwrap(),
+            started_with_full_permissions: false,
         });
     server
         .app

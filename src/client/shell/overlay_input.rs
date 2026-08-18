@@ -300,6 +300,12 @@ impl ClientShellState {
                 ClientEndpointFocusTarget::Workspace(workspace_id),
                 outcome,
             ),
+            ClientNavigatorTarget::Tab {
+                endpoint_id,
+                tab_id,
+            } => {
+                self.focus_or_activate(endpoint_id, ClientEndpointFocusTarget::Tab(tab_id), outcome)
+            }
             ClientNavigatorTarget::Pane {
                 endpoint_id,
                 pane_id,
@@ -751,6 +757,7 @@ impl ClientShellState {
                 KeyCode::Char('w') if modifiers.is_empty() => Some(ClientNavigatorFilter::Working),
                 KeyCode::Char('i') if modifiers.is_empty() => Some(ClientNavigatorFilter::Idle),
                 KeyCode::Char('d') if modifiers.is_empty() => Some(ClientNavigatorFilter::Done),
+                KeyCode::Char('m') if modifiers.is_empty() => Some(ClientNavigatorFilter::Marked),
                 _ => None,
             } {
                 if let Some(ClientShellOverlay::Navigator(navigator)) = self.overlay.as_mut() {
