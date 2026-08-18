@@ -472,6 +472,7 @@ pub(super) fn render_expanded(
                     buffer,
                     nested,
                     status,
+                    super::sidebar::workspace_has_marked_tab(snapshot, &workspace.workspace_id),
                     config.status_indicators,
                     entry,
                     tokens,

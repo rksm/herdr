@@ -791,6 +791,7 @@ fn restore_tab(
         Some((
             crate::workspace::Tab {
                 custom_name: snap.custom_name.clone(),
+                marked: snap.marked,
                 number,
                 root_pane,
                 layout,
@@ -1569,7 +1570,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn restore_carries_persisted_agent_session_metadata() {
+    async fn restore_carries_tab_mark_and_persisted_agent_session_metadata() {
         let cwd = std::env::current_dir().unwrap();
         let snapshot = SessionSnapshot {
             version: super::super::snapshot::SNAPSHOT_VERSION,
@@ -1584,6 +1585,7 @@ mod tests {
                 next_public_tab_number: 0,
                 tabs: vec![TabSnapshot {
                     custom_name: None,
+                    marked: true,
                     layout: LayoutSnapshot::Pane(0),
                     panes: HashMap::from([(
                         0,
@@ -1617,7 +1619,7 @@ mod tests {
         };
         let (events, _event_rx) = mpsc::channel(4);
 
-        let (_workspaces, terminals, _runtimes) = restore(
+        let (workspaces, terminals, _runtimes) = restore(
             &snapshot,
             None,
             24,
@@ -1631,6 +1633,7 @@ mod tests {
             Arc::new(RenderSignal::new()),
         );
 
+        assert!(workspaces[0].tabs[0].marked);
         let terminal = terminals
             .values()
             .next()
@@ -1666,6 +1669,7 @@ mod tests {
                 next_public_tab_number: 6,
                 tabs: vec![TabSnapshot {
                     custom_name: None,
+                    marked: false,
                     layout: LayoutSnapshot::Split {
                         direction: super::super::snapshot::DirectionSnapshot::Horizontal,
                         ratio: 0.5,
@@ -1781,6 +1785,7 @@ mod tests {
                 tabs: vec![
                     TabSnapshot {
                         custom_name: None,
+                        marked: false,
                         layout: LayoutSnapshot::Pane(10),
                         panes: HashMap::from([pane_snap("10")]),
                         zoomed: false,
@@ -1789,6 +1794,7 @@ mod tests {
                     },
                     TabSnapshot {
                         custom_name: None,
+                        marked: false,
                         layout: LayoutSnapshot::Pane(11),
                         panes: HashMap::from([pane_snap("11")]),
                         zoomed: false,
@@ -1797,6 +1803,7 @@ mod tests {
                     },
                     TabSnapshot {
                         custom_name: None,
+                        marked: false,
                         layout: LayoutSnapshot::Pane(12),
                         panes: HashMap::from([pane_snap("12")]),
                         zoomed: false,
@@ -1805,6 +1812,7 @@ mod tests {
                     },
                     TabSnapshot {
                         custom_name: None,
+                        marked: false,
                         layout: LayoutSnapshot::Pane(13),
                         panes: HashMap::from([(13, final_pane)]),
                         zoomed: false,
@@ -1863,6 +1871,7 @@ mod tests {
             next_public_tab_number: 0,
             tabs: vec![TabSnapshot {
                 custom_name: None,
+                marked: false,
                 layout: LayoutSnapshot::Split {
                     direction: super::super::snapshot::DirectionSnapshot::Horizontal,
                     ratio: 0.5,
@@ -1902,6 +1911,7 @@ mod tests {
                 next_public_tab_number: 0,
                 tabs: vec![TabSnapshot {
                     custom_name: None,
+                    marked: false,
                     layout: LayoutSnapshot::Pane(0),
                     panes: HashMap::from([(
                         0,
@@ -2259,6 +2269,7 @@ mod tests {
                 next_public_tab_number: 0,
                 tabs: vec![TabSnapshot {
                     custom_name: None,
+                    marked: false,
                     layout: LayoutSnapshot::Pane(0),
                     panes,
                     zoomed: false,
