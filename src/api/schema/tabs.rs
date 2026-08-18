@@ -61,6 +61,14 @@ pub struct TabMoveParams {
     pub insert_index: usize,
 }
 
+cli_params! {
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+    pub struct TabMarkSetParams => TabMarkSetProjection {
+        pub tab_id: String => Field::new(String::new()).input(tab_id()),
+        pub marked: bool => Field::new(true).input(bindings::boolean("clear", false)),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct TabInfo {
     pub tab_id: String,
@@ -70,4 +78,6 @@ pub struct TabInfo {
     pub focused: bool,
     pub pane_count: usize,
     pub agent_status: AgentStatus,
+    #[serde(default, skip_serializing_if = "super::is_false")]
+    pub marked: bool,
 }
