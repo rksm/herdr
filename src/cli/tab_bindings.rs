@@ -1,7 +1,7 @@
 use clap::Command;
 
 use crate::api::schema::tabs::{
-    tab_id, TabCreateProjection, TabListProjection, TabRenameProjection,
+    tab_id, TabCreateProjection, TabListProjection, TabMarkSetProjection, TabRenameProjection,
 };
 use crate::api::schema::{Method, Request, TabTarget};
 
@@ -13,7 +13,7 @@ cli_projection! {
     }
 }
 
-const LEAVES: [Leaf; 6] = [
+const LEAVES: [Leaf; 7] = [
     Leaf {
         name: "list",
         about: "List tabs",
@@ -48,6 +48,13 @@ const LEAVES: [Leaf; 6] = [
         id: "cli:tab:rename",
         arguments: TabRenameProjection::arguments,
         method: |matches| TabRenameProjection::from_matches(matches).map(Method::TabRename),
+    },
+    Leaf {
+        name: "mark",
+        about: "Mark a tab for later",
+        id: "cli:tab:mark:set",
+        arguments: TabMarkSetProjection::arguments,
+        method: |matches| TabMarkSetProjection::from_matches(matches).map(Method::TabMarkSet),
     },
     Leaf {
         name: "close",
@@ -123,6 +130,14 @@ mod tests {
                 serde_json::json!({"id":"cli:tab:focus","method":"tab.focus","params":{"tab_id":"2"}}),
             ),
             (
+                vec!["mark", "2"],
+                serde_json::json!({"id":"cli:tab:mark:set","method":"tab.mark.set","params":{"tab_id":"2","marked":true}}),
+            ),
+            (
+                vec!["mark", "2", "--clear"],
+                serde_json::json!({"id":"cli:tab:mark:set","method":"tab.mark.set","params":{"tab_id":"2","marked":false}}),
+            ),
+            (
                 vec!["close", "tab-2"],
                 serde_json::json!({"id":"cli:tab:close","method":"tab.close","params":{"tab_id":"tab-2"}}),
             ),
@@ -161,6 +176,8 @@ mod tests {
         for args in [
             vec!["get"],
             vec!["get", "2", "extra"],
+            vec!["mark"],
+            vec!["mark", "2", "extra"],
             vec!["create", "--cwd"],
         ] {
             assert!(matches!(parse(&args), Err(ParseError::Clap(error)) if error.exit_code() == 2));

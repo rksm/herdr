@@ -372,10 +372,15 @@ fn max_tab_scroll(widths: &[u16], available: u16) -> usize {
 }
 
 fn tab_label(tab: &ClientShellTab) -> String {
-    if tab.zoomed {
-        format!("{} Z", tab.label)
+    let label = if tab.marked {
+        format!("★ {}", tab.label)
     } else {
         tab.label.clone()
+    };
+    if tab.zoomed {
+        format!("{label} Z")
+    } else {
+        label
     }
 }
 
