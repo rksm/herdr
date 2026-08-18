@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::api::schema::{TabCreateParams, TabListParams, TabRenameParams};
+use crate::api::schema::{TabCreateParams, TabListParams, TabMarkSetParams, TabRenameParams};
 
 pub(super) fn run_tab_command(args: &[String]) -> std::io::Result<i32> {
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
@@ -14,6 +14,7 @@ pub(super) fn run_tab_command(args: &[String]) -> std::io::Result<i32> {
         "get" => tab_get(&args[1..]),
         "focus" => tab_focus(&args[1..]),
         "rename" => tab_rename(&args[1..]),
+        "mark" => tab_mark(&args[1..]),
         "close" => tab_close(&args[1..]),
         "help" | "--help" | "-h" => {
             print_tab_help();
@@ -161,6 +162,22 @@ fn tab_rename(args: &[String]) -> std::io::Result<i32> {
     })
 }
 
+fn tab_mark(args: &[String]) -> std::io::Result<i32> {
+    let Some(raw_tab_id) = args.first() else {
+        eprintln!("usage: herdr tab mark <tab_id> [--clear]");
+        return Ok(2);
+    };
+    if args.len() > 2 || args.get(1).is_some_and(|arg| arg != "--clear") {
+        eprintln!("usage: herdr tab mark <tab_id> [--clear]");
+        return Ok(2);
+    }
+
+    super::runtime::tab_mark_set(TabMarkSetParams {
+        tab_id: super::normalize_tab_id(raw_tab_id),
+        marked: args.get(1).is_none(),
+    })
+}
+
 fn tab_close(args: &[String]) -> std::io::Result<i32> {
     let Some(raw_tab_id) = args.first() else {
         eprintln!("usage: herdr tab close <tab_id>");
@@ -183,5 +200,6 @@ fn print_tab_help() {
     eprintln!("  herdr tab get <tab_id>");
     eprintln!("  herdr tab focus <tab_id>");
     eprintln!("  herdr tab rename <tab_id> <label>");
+    eprintln!("  herdr tab mark <tab_id> [--clear]");
     eprintln!("  herdr tab close <tab_id>");
 }

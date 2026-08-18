@@ -732,6 +732,7 @@ fn render_navigator_overlay(
                 ClientNavigatorFilter::Working => "working",
                 ClientNavigatorFilter::Idle => "idle",
                 ClientNavigatorFilter::Done => "done",
+                ClientNavigatorFilter::Marked => "marked",
             }
         )
     } else if n.query.is_empty() {
