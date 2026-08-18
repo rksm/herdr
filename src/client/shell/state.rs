@@ -325,6 +325,7 @@ pub(super) enum ClientNavigatorFilter {
     Working,
     Idle,
     Done,
+    Marked,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -515,6 +516,7 @@ pub(super) enum ClientContextMenuAction {
     RemoveWorktree,
     ToggleGroup,
     NewTab,
+    ToggleTabMark,
     RenamePane,
     ClearPaneName,
     SwapWithFocusedPane,
@@ -537,6 +539,7 @@ pub(super) enum ClientContextMenuTarget {
     Tab {
         tab_id: String,
         workspace_id: String,
+        marked: bool,
     },
     Pane {
         pane_id: String,
@@ -1379,6 +1382,7 @@ impl ClientShellState {
                         left.tab_id != right.tab_id
                             || left.workspace_id != right.workspace_id
                             || left.label != right.label
+                            || left.marked != right.marked
                             || left.zoomed != right.zoomed
                     })
                 || render::tab_bar_status_width(current) != render::tab_bar_status_width(&snapshot)

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::api::schema::{
     EventData, EventEnvelope, EventKind, ResponseResult, TabCreateParams, TabListParams,
-    TabMoveParams, TabRenameParams, TabTarget,
+    TabMarkSetParams, TabMoveParams, TabRenameParams, TabTarget,
 };
 use crate::app::{App, Mode};
 
@@ -211,6 +211,26 @@ impl App {
         }
 
         encode_success(id, ResponseResult::TabList { tabs })
+    }
+
+    pub(super) fn handle_tab_mark_set(&mut self, id: String, params: TabMarkSetParams) -> String {
+        let Some((ws_idx, tab_idx)) = self.parse_tab_id(&params.tab_id) else {
+            return tab_not_found(id, &params.tab_id);
+        };
+        let changed = self.state.set_tab_marked(ws_idx, tab_idx, params.marked);
+        let Some(tab) = self.tab_info(ws_idx, tab_idx) else {
+            return tab_not_found(id, &params.tab_id);
+        };
+
+        if changed {
+            self.schedule_session_save();
+            self.emit_event(EventEnvelope {
+                event: EventKind::TabMarkUpdated,
+                data: EventData::TabMarkUpdated { tab: tab.clone() },
+            });
+        }
+
+        encode_success(id, ResponseResult::TabInfo { tab })
     }
 
     pub(super) fn handle_tab_close(&mut self, id: String, target: TabTarget) -> String {

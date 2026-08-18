@@ -40,6 +40,7 @@ const CLIENT_SHELL_METHODS: &[&str] = &[
     "tab.close",
     "tab.create",
     "tab.focus",
+    "tab.mark.set",
     "tab.move",
     "tab.rename",
     "workspace.close",
@@ -373,6 +374,16 @@ mod tests {
         )));
         assert!(!supports_client_shell_method(&Method::ServerStop(
             crate::api::schema::EmptyParams::default(),
+        )));
+    }
+
+    #[test]
+    fn client_shell_lane_supports_tab_mark() {
+        assert!(supports_client_shell_method(&Method::TabMarkSet(
+            crate::api::schema::TabMarkSetParams {
+                tab_id: "w1:t1".into(),
+                marked: true,
+            },
         )));
     }
 
