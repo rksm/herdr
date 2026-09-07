@@ -486,6 +486,9 @@ impl AppState {
                 changed = true;
             }
         }
+        if changed {
+            self.mark_session_dirty();
+        }
         changed
     }
 
@@ -1797,12 +1800,20 @@ impl AppState {
             .iter_mut()
             .find_map(|tab| tab.panes.get_mut(&pane_id))?;
 
-        if change.state != AgentState::Idle {
+        let previous_seen = pane.seen;
+        let restoring = self
+            .terminals
+            .get(&pane.attached_terminal_id)
+            .is_some_and(|terminal| terminal.resumed_agent_waiting_for_input);
+        if matches!(change.state, AgentState::Working | AgentState::Blocked) && !restoring {
             pane.seen = true;
         } else if !suppress_completion && is_completion_transition(change) {
             pane.seen = suppress_active_tab_notifications;
         }
         let seen = pane.seen;
+        if seen != previous_seen {
+            self.mark_session_dirty();
+        }
 
         if !suppress_completion {
             if let Some(delivery) =
@@ -3274,6 +3285,76 @@ mod tests {
             &[AgentState::Idle, AgentState::Working, AgentState::Idle],
             true,
         );
+    }
+
+    #[test]
+    fn unread_done_survives_process_reacquisition_after_handoff() {
+        let mut state = app_with_workspaces(&["active", "imported"]);
+        state.active = Some(0);
+        let pane_id = state.workspaces[1].tabs[0].root_pane;
+        state.workspaces[1].tabs[0]
+            .panes
+            .get_mut(&pane_id)
+            .unwrap()
+            .seen = false;
+        state.handle_app_event(AppEvent::AgentProcessDetected {
+            pane_id,
+            agent: Agent::Codex,
+            observed_at: Instant::now(),
+        });
+        assert!(!state.workspaces[1].pane_state(pane_id).unwrap().seen);
+        let event = |agent_state| AppEvent::StateChanged {
+            pane_id,
+            agent: Some(Agent::Codex),
+            state: agent_state,
+            visible_blocker: false,
+            visible_working: agent_state == AgentState::Working,
+            process_exited: false,
+            observed_at: Instant::now(),
+        };
+        state.handle_app_event(event(AgentState::Idle));
+        assert!(!state.workspaces[1].pane_state(pane_id).unwrap().seen);
+        state.handle_app_event(event(AgentState::Working));
+        assert!(state.workspaces[1].pane_state(pane_id).unwrap().seen);
+        state.handle_app_event(event(AgentState::Idle));
+        assert!(!state.workspaces[1].pane_state(pane_id).unwrap().seen);
+        state.assert_invariants_for_test();
+    }
+
+    #[test]
+    fn restored_unread_done_stays_acknowledged_during_startup() {
+        let mut state = app_with_workspaces(&["active", "background"]);
+        state.active = Some(0);
+        let pane_id = state.workspaces[1].tabs[0].root_pane;
+        let terminal_id = state.workspaces[1].terminal_id(pane_id).cloned().unwrap();
+        state
+            .terminals
+            .get_mut(&terminal_id)
+            .unwrap()
+            .resumed_agent_waiting_for_input = true;
+        state.workspaces[1].tabs[0]
+            .panes
+            .get_mut(&pane_id)
+            .unwrap()
+            .seen = false;
+        state.active = Some(1);
+        state.session_dirty = false;
+        assert!(state.mark_active_tab_seen());
+        assert!(state.session_dirty);
+        state.active = Some(0);
+        for agent_state in [AgentState::Unknown, AgentState::Working, AgentState::Idle] {
+            state.handle_app_event(AppEvent::StateChanged {
+                pane_id,
+                agent: Some(Agent::Codex),
+                state: agent_state,
+                visible_blocker: false,
+                visible_working: agent_state == AgentState::Working,
+                process_exited: false,
+                observed_at: Instant::now(),
+            });
+            assert!(state.workspaces[1].pane_state(pane_id).unwrap().seen);
+        }
+        state.assert_invariants_for_test();
     }
 
     #[test]

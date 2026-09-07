@@ -100,6 +100,8 @@ pub struct TabSnapshot {
 
 #[derive(Serialize, Deserialize)]
 pub struct PaneSnapshot {
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub unread_done: bool,
     pub cwd: PathBuf,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
@@ -385,6 +387,7 @@ fn capture_tab(
         panes.insert(
             id.raw(),
             PaneSnapshot {
+                unread_done: tab.panes.get(id).is_some_and(|pane| !pane.seen),
                 cwd,
                 label,
                 agent_name,
@@ -704,6 +707,7 @@ mod tests {
         panes.insert(
             0,
             PaneSnapshot {
+                unread_done: false,
                 cwd: PathBuf::from("/home/can/Projects/herdr"),
                 label: None,
                 agent_name: None,
@@ -715,6 +719,7 @@ mod tests {
         panes.insert(
             1,
             PaneSnapshot {
+                unread_done: false,
                 cwd: PathBuf::from("/home/can/Projects/website"),
                 label: Some("website".into()),
                 agent_name: None,
@@ -876,6 +881,37 @@ mod tests {
         assert_eq!(ws.tabs[0].root_pane, Some(0));
         assert_eq!(ws.tabs[0].panes[&0].cwd, PathBuf::from("/tmp/pion"));
         assert_eq!(ws.tabs[0].panes[&1].cwd, PathBuf::from("/tmp/herdr"));
+    }
+
+    #[test]
+    fn unread_done_round_trip_and_legacy_default() {
+        let mut state = state_with_workspaces(&["read", "unread"]);
+        let pane_id = state.workspaces[1].tabs[0].root_pane;
+        state.workspaces[1].tabs[0]
+            .panes
+            .get_mut(&pane_id)
+            .unwrap()
+            .seen = false;
+        let json = serde_json::to_string(&capture_from_state(&state)).unwrap();
+        let restored: SessionSnapshot = serde_json::from_str(&json).unwrap();
+        assert!(restored.workspaces[1].tabs[0].panes[&pane_id.raw()].unread_done);
+        assert!(
+            !restored.workspaces[0].tabs[0]
+                .panes
+                .values()
+                .next()
+                .unwrap()
+                .unread_done
+        );
+        let legacy: PaneSnapshot = serde_json::from_value(serde_json::json!({
+            "cwd": std::env::temp_dir(),
+        }))
+        .unwrap();
+        assert!(!legacy.unread_done);
+        assert!(serde_json::to_value(&legacy)
+            .unwrap()
+            .get("unread_done")
+            .is_none());
     }
 
     #[test]
@@ -1428,6 +1464,7 @@ mod tests {
         panes.insert(
             0,
             PaneSnapshot {
+                unread_done: false,
                 cwd: PathBuf::from("/tmp/this-directory-does-not-exist-for-herdr-test"),
                 label: None,
                 agent_name: None,
@@ -1439,6 +1476,7 @@ mod tests {
         panes.insert(
             1,
             PaneSnapshot {
+                unread_done: false,
                 cwd: std::env::var("HOME")
                     .map(PathBuf::from)
                     .unwrap_or_else(|_| PathBuf::from("/tmp")),
