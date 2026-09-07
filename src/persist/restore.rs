@@ -622,7 +622,13 @@ fn restore_tab(
                     std::time::Instant::now(),
                 );
             }
-            panes.insert(*id, PaneState::new(terminal_id));
+            panes.insert(
+                *id,
+                PaneState {
+                    seen: !saved_pane.is_some_and(|pane| pane.unread_done),
+                    ..PaneState::new(terminal_id)
+                },
+            );
             terminals.push(terminal);
             continue;
         }
@@ -728,7 +734,13 @@ fn restore_tab(
                 if let Some(agent_state) = handoff_agent_state {
                     terminal.restore_handoff_agent_state(agent_state);
                 }
-                panes.insert(*id, PaneState::new(terminal_id.clone()));
+                panes.insert(
+                    *id,
+                    PaneState {
+                        seen: !saved_pane.is_some_and(|pane| pane.unread_done),
+                        ..PaneState::new(terminal_id.clone())
+                    },
+                );
                 terminal_runtimes.insert(terminal_id, runtime);
                 terminals.push(terminal);
             }
@@ -1592,6 +1604,7 @@ mod tests {
                     panes: HashMap::from([(
                         0,
                         super::super::snapshot::PaneSnapshot {
+                            unread_done: false,
                             cwd,
                             label: Some("reviewer".into()),
                             agent_name: Some("reviewer".into()),
@@ -1682,6 +1695,7 @@ mod tests {
                         (
                             10,
                             super::super::snapshot::PaneSnapshot {
+                                unread_done: false,
                                 cwd: cwd.clone(),
                                 label: None,
                                 agent_name: None,
@@ -1694,6 +1708,7 @@ mod tests {
                         (
                             20,
                             super::super::snapshot::PaneSnapshot {
+                                unread_done: false,
                                 cwd: cwd.clone(),
                                 label: None,
                                 agent_name: None,
@@ -1748,6 +1763,7 @@ mod tests {
             (
                 id.parse::<u32>().unwrap(),
                 super::super::snapshot::PaneSnapshot {
+                    unread_done: false,
                     cwd: cwd.clone(),
                     label: None,
                     agent_name: None,
@@ -1759,6 +1775,7 @@ mod tests {
             )
         };
         let final_pane = super::super::snapshot::PaneSnapshot {
+            unread_done: false,
             cwd: cwd.clone(),
             label: Some("planner".into()),
             agent_name: Some("planner".into()),
@@ -1918,6 +1935,7 @@ mod tests {
                     panes: HashMap::from([(
                         0,
                         super::super::snapshot::PaneSnapshot {
+                            unread_done: true,
                             cwd,
                             label: None,
                             agent_name: None,
@@ -1947,7 +1965,7 @@ mod tests {
         };
         let (events, _event_rx) = mpsc::channel(4);
 
-        let (_workspaces, terminals, runtimes) = restore(
+        let (workspaces, terminals, runtimes) = restore(
             &snapshot,
             None,
             24,
@@ -1961,6 +1979,8 @@ mod tests {
             Arc::new(RenderSignal::new()),
         );
 
+        assert!(!workspaces[0].tabs[0].panes.values().next().unwrap().seen);
+        workspaces[0].assert_invariants_for_test();
         let terminal = terminals
             .values()
             .next()
@@ -1978,7 +1998,7 @@ mod tests {
             "native agent restore should not spawn a fallback-size runtime during snapshot restore"
         );
         let mut imports = HashMap::new();
-        let (_handoff_workspaces, handoff_terminals, handoff_runtimes) = restore_handoff(
+        let (handoff_workspaces, handoff_terminals, handoff_runtimes) = restore_handoff(
             &snapshot,
             0,
             test_restore_shell(),
@@ -1989,6 +2009,14 @@ mod tests {
             Arc::new(RenderSignal::new()),
         )
         .expect("handoff restore should preserve pending native agent resume");
+        assert!(
+            !handoff_workspaces[0].tabs[0]
+                .panes
+                .values()
+                .next()
+                .unwrap()
+                .seen
+        );
         let handoff_terminal = handoff_terminals
             .values()
             .next()
@@ -2230,6 +2258,7 @@ mod tests {
         panes.insert(
             0,
             super::super::snapshot::PaneSnapshot {
+                unread_done: false,
                 cwd: cwd.clone(),
                 label: None,
                 agent_name: None,
