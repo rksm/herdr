@@ -458,6 +458,21 @@ impl TerminalRuntime {
         self.0.encode_terminal_key(key)
     }
 
+    pub(crate) fn try_send_terminal_control(
+        &self,
+        bytes: Bytes,
+    ) -> Result<(), mpsc::error::TrySendError<Bytes>> {
+        self.0.try_send_terminal_control(bytes)
+    }
+
+    pub(crate) fn user_input_received(&self) -> bool {
+        self.0.user_input_received()
+    }
+
+    pub(crate) fn reset_user_input_received(&self) {
+        self.0.reset_user_input_received();
+    }
+
     pub fn try_send_bytes(&self, bytes: Bytes) -> Result<(), mpsc::error::TrySendError<Bytes>> {
         self.0.try_send_bytes(bytes)
     }

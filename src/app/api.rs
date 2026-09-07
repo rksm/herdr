@@ -309,6 +309,33 @@ impl App {
             } else {
                 None
             };
+        let agent_pane = match &ev {
+            AppEvent::StateChanged { pane_id, .. }
+            | AppEvent::HookStateReported { pane_id, .. }
+            | AppEvent::AgentSessionReported { pane_id, .. }
+            | AppEvent::HookMetadataReported { pane_id, .. }
+            | AppEvent::HookAgentReleased { pane_id, .. }
+            | AppEvent::HookAuthorityCleared { pane_id, .. } => Some(*pane_id),
+            _ => None,
+        };
+        let terminal_id = agent_pane.and_then(|pane_id| {
+            self.state
+                .workspaces
+                .iter()
+                .find_map(|workspace| workspace.terminal_id(pane_id))
+        });
+        if let Some(terminal_id) = terminal_id {
+            if let Some(terminal) = self.state.terminals.get_mut(terminal_id) {
+                if terminal.resumed_agent_waiting_for_input
+                    && self
+                        .terminal_runtimes
+                        .get(terminal_id)
+                        .is_some_and(|runtime| runtime.user_input_received())
+                {
+                    terminal.record_resumed_agent_input();
+                }
+            }
+        }
         let terminal_cwd_reported = matches!(ev, AppEvent::TerminalCwdReported { .. });
         let previous_toast = self.state.toast.clone();
         let mut pane_updates = self.state.handle_app_event(ev);
