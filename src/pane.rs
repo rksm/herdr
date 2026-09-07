@@ -1318,6 +1318,7 @@ pub struct PaneRuntime {
     terminal: Arc<PaneTerminal>,
     io: PaneRuntimeIo,
     current_size: Cell<(u16, u16, u32, u32)>,
+    user_input_received: Cell<bool>,
     child_pid: Arc<AtomicU32>,
     reported_cwd: Arc<Mutex<Option<std::path::PathBuf>>>,
     persistence_cwd: Mutex<Option<std::path::PathBuf>>,
@@ -2474,6 +2475,7 @@ impl PaneRuntime {
             pane_id,
             terminal,
             io,
+            user_input_received: Cell::new(false),
             current_size: Cell::new((rows, cols, cell_width_px, cell_height_px)),
             child_pid,
             reported_cwd,
@@ -3064,6 +3066,7 @@ impl PaneRuntime {
             pane_id,
             terminal,
             io,
+            user_input_received: Cell::new(false),
             current_size: Cell::new((rows, cols, 0, 0)),
             child_pid,
             reported_cwd,
@@ -3451,7 +3454,28 @@ impl PaneRuntime {
     }
 
     pub fn try_send_bytes(&self, bytes: Bytes) -> Result<(), mpsc::error::TrySendError<Bytes>> {
+        let has_input = !bytes.is_empty();
+        self.io.try_send_bytes(bytes)?;
+        if has_input {
+            self.user_input_received.set(true);
+        }
+        Ok(())
+    }
+
+    // Server-generated focus and read-navigation controls do not start a new agent turn.
+    pub(crate) fn try_send_terminal_control(
+        &self,
+        bytes: Bytes,
+    ) -> Result<(), mpsc::error::TrySendError<Bytes>> {
         self.io.try_send_bytes(bytes)
+    }
+
+    pub(crate) fn user_input_received(&self) -> bool {
+        self.user_input_received.get()
+    }
+
+    pub(crate) fn reset_user_input_received(&self) {
+        self.user_input_received.set(false);
     }
 
     pub fn queue_user_input_submission(
@@ -3461,11 +3485,20 @@ impl PaneRuntime {
         delay: std::time::Duration,
         deadline: Option<std::time::Instant>,
     ) -> std::io::Result<std::sync::mpsc::Receiver<std::io::Result<()>>> {
-        self.io
-            .queue_user_input_submission(text, enter, delay, deadline)
+        let has_input = !text.is_empty() || !enter.is_empty();
+        let reply = self
+            .io
+            .queue_user_input_submission(text, enter, delay, deadline)?;
+        if has_input {
+            self.user_input_received.set(true);
+        }
+        Ok(reply)
     }
 
     pub fn try_send_paste(&self, text: String) -> Result<(), mpsc::error::TrySendError<Bytes>> {
+        if text.is_empty() {
+            return Ok(());
+        }
         self.try_send_bytes(self.paste_payload(text))
     }
 
@@ -3488,7 +3521,7 @@ impl PaneRuntime {
         let Ok(bytes) = crate::ghostty::encode_focus(event) else {
             return false;
         };
-        if let Err(err) = self.try_send_bytes(Bytes::from(bytes)) {
+        if let Err(err) = self.try_send_terminal_control(Bytes::from(bytes)) {
             warn!(err = %err, ?event, "failed to forward pane focus event");
         }
         true
@@ -3778,6 +3811,7 @@ impl PaneRuntime {
                     sender: tx,
                     resize_tx,
                 },
+                user_input_received: Cell::new(false),
                 current_size: Cell::new((rows, cols, 0, 0)),
                 child_pid: Arc::new(AtomicU32::new(0)),
                 reported_cwd: Arc::new(Mutex::new(None)),
@@ -4927,6 +4961,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn user_input_tracking_excludes_failed_and_empty_writes() {
+        let (runtime, mut input) = PaneRuntime::test_with_channel_capacity(80, 24, 1);
+        runtime.try_send_bytes(Bytes::new()).unwrap();
+        assert!(!runtime.user_input_received());
+        assert!(runtime.try_send_bytes(Bytes::from_static(b"full")).is_err());
+        assert!(!runtime.user_input_received());
+        input.recv().await.unwrap();
+        runtime
+            .try_send_terminal_control(Bytes::from_static(b"\x1b[I"))
+            .unwrap();
+        input.recv().await.unwrap();
+        assert!(!runtime.user_input_received());
+        runtime.try_send_paste("prompt".into()).unwrap();
+        assert!(runtime.user_input_received());
+        input.recv().await.unwrap();
+        runtime.reset_user_input_received();
+        let reply = runtime
+            .queue_user_input_submission(
+                Bytes::from_static(b"prompt"),
+                Bytes::from_static(b"\r"),
+                std::time::Duration::ZERO,
+                None,
+            )
+            .unwrap();
+        assert!(runtime.user_input_received());
+        input.recv().await.unwrap();
+        // The bounded test channel may reject Enter; receipt means queue acceptance.
+        drop(reply);
+    }
+
+    #[tokio::test]
     async fn focus_events_are_forwarded_when_enabled() {
         let (tx, mut rx) = mpsc::channel(4);
         let (resize_tx, _resize_rx) = watch::channel((80, 24, 0, 0));
@@ -4948,6 +5013,7 @@ mod tests {
                 sender: tx,
                 resize_tx,
             },
+            user_input_received: Cell::new(false),
             current_size: Cell::new((80, 24, 0, 0)),
             child_pid: Arc::new(AtomicU32::new(0)),
             reported_cwd: Arc::new(Mutex::new(None)),
@@ -4965,6 +5031,7 @@ mod tests {
         };
 
         assert!(runtime.try_send_focus_event(crate::ghostty::FocusEvent::Gained));
+        assert!(!runtime.user_input_received());
         assert_eq!(rx.recv().await.unwrap(), Bytes::from_static(b"\x1b[I"));
     }
 
@@ -4987,6 +5054,7 @@ mod tests {
                 sender: tx,
                 resize_tx,
             },
+            user_input_received: Cell::new(false),
             current_size: Cell::new((80, 24, 0, 0)),
             child_pid: Arc::new(AtomicU32::new(0)),
             reported_cwd: Arc::new(Mutex::new(None)),

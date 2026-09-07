@@ -158,6 +158,8 @@ pub struct TerminalState {
     pub respawn_shell_on_exit: bool,
     recent_agent_process_exit: Option<RecentAgentProcessExit>,
     agent_process_acquisition_pending: bool,
+    // Interactive restore opens saved work; loading it is not a new turn.
+    pub(crate) resumed_agent_waiting_for_input: bool,
     pub pending_agent_resume_plan: Option<crate::agent_resume::AgentResumePlan>,
     pub restore_error: Option<String>,
 }
@@ -196,6 +198,7 @@ impl TerminalState {
             respawn_shell_on_exit: false,
             recent_agent_process_exit: None,
             agent_process_acquisition_pending: false,
+            resumed_agent_waiting_for_input: false,
             pending_agent_resume_plan: None,
             restore_error: None,
         }
@@ -251,12 +254,22 @@ impl TerminalState {
     }
 
     pub(crate) fn finish_agent_process_acquisition(&mut self) -> bool {
+        if self.resumed_agent_waiting_for_input && self.recent_agent_process_exit.is_none() {
+            return true;
+        }
         let reached_idle = self.agent_process_acquisition_pending && self.state == AgentState::Idle;
         let suppress_completion = reached_idle && self.recent_agent_process_exit.is_none();
         if reached_idle {
             self.agent_process_acquisition_pending = false;
         }
         suppress_completion
+    }
+
+    pub(crate) fn record_resumed_agent_input(&mut self) {
+        if self.resumed_agent_waiting_for_input {
+            self.resumed_agent_waiting_for_input = false;
+            self.agent_process_acquisition_pending = false;
+        }
     }
 
     pub(crate) fn terminal_title_stripped(&self) -> Option<String> {
@@ -302,6 +315,7 @@ impl TerminalState {
         plan: crate::agent_resume::AgentResumePlan,
     ) -> Self {
         self.pending_agent_resume_plan = Some(plan);
+        self.resumed_agent_waiting_for_input = true;
         self
     }
 
@@ -2201,6 +2215,7 @@ impl TerminalState {
         self.recent_agent_process_exit = None;
         self.agent_process_acquisition_pending = false;
         self.pending_agent_resume_plan = None;
+        self.resumed_agent_waiting_for_input = false;
         self.clear_agent_name();
     }
 
