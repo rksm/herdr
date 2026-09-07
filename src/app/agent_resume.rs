@@ -309,6 +309,7 @@ impl App {
             return false;
         }
 
+        runtime.reset_user_input_received();
         self.terminal_runtimes.insert(terminal_id.clone(), runtime);
         if let Some(terminal) = self.state.terminals.get_mut(&terminal_id) {
             terminal.pending_agent_resume_plan = None;
@@ -384,7 +385,6 @@ fn shell_quote(value: &str) -> String {
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
     fn test_app() -> App {
         let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
         App::new(
@@ -475,6 +475,81 @@ mod tests {
                 4
             );
         }
+    }
+
+    #[tokio::test]
+    async fn restored_agent_startup_waits_for_input_before_notifying() {
+        use crate::detect::{Agent, AgentState};
+        use crate::events::AppEvent;
+        use crate::terminal::{TerminalRuntime, TerminalState};
+
+        let mut app = test_app();
+        app.state.workspaces = vec![
+            crate::workspace::Workspace::test_new("active"),
+            crate::workspace::Workspace::test_new("restored"),
+        ];
+        app.state.active = Some(0);
+        app.state.ensure_test_terminals();
+        let pane_id = app.state.workspaces[1].tabs[0].root_pane;
+        let terminal_id = app.state.workspaces[1]
+            .terminal_id(pane_id)
+            .cloned()
+            .unwrap();
+        app.state.terminals.insert(
+            terminal_id.clone(),
+            TerminalState::new(terminal_id.clone(), std::env::temp_dir())
+                .with_pending_agent_resume_plan(crate::agent_resume::AgentResumePlan {
+                    agent: "codex".into(),
+                    argv: vec!["codex".into(), "resume".into(), "session".into()],
+                    dedupe_key: "session".into(),
+                }),
+        );
+        let (runtime, mut input) = TerminalRuntime::test_with_channel(80, 24);
+        runtime
+            .try_send_bytes(Bytes::from_static(b"codex resume session\r"))
+            .unwrap();
+        input.recv().await.unwrap();
+        runtime.reset_user_input_received();
+        app.terminal_runtimes.insert(terminal_id.clone(), runtime);
+        app.handle_internal_event_with_pane_updates(AppEvent::AgentProcessDetected {
+            pane_id,
+            agent: Agent::Codex,
+            observed_at: std::time::Instant::now(),
+        });
+        let state_event = |state| AppEvent::StateChanged {
+            pane_id,
+            agent: Some(Agent::Codex),
+            state,
+            visible_blocker: state == AgentState::Blocked,
+            visible_working: state == AgentState::Working,
+            process_exited: false,
+            observed_at: std::time::Instant::now(),
+        };
+        for state in [
+            AgentState::Idle,
+            AgentState::Working,
+            AgentState::Idle,
+            AgentState::Working,
+            AgentState::Blocked,
+            AgentState::Idle,
+        ] {
+            let updates = app.handle_internal_event_with_pane_updates(state_event(state));
+            assert!(app.state.workspaces[1].pane_state(pane_id).unwrap().seen);
+            if state == AgentState::Idle {
+                assert!(updates.iter().all(|update| update.suppress_completion));
+            }
+        }
+        app.terminal_runtimes
+            .get(&terminal_id)
+            .unwrap()
+            .try_send_bytes(Bytes::from_static(b"do work\r"))
+            .unwrap();
+        input.recv().await.unwrap();
+        app.handle_internal_event_with_pane_updates(state_event(AgentState::Working));
+        let updates = app.handle_internal_event_with_pane_updates(state_event(AgentState::Idle));
+        assert!(!updates[0].suppress_completion);
+        assert!(!app.state.workspaces[1].pane_state(pane_id).unwrap().seen);
+        app.state.assert_invariants_for_test();
     }
 
     #[cfg(unix)]
