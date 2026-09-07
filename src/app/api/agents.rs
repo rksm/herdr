@@ -187,7 +187,7 @@ impl App {
                     return Err(encode_error(id, "agent_prompt_failed", err.to_string()));
                 }
             };
-            if let Err(err) = runtime.try_send_bytes(Bytes::from(focus)) {
+            if let Err(err) = runtime.try_send_terminal_control(Bytes::from(focus)) {
                 return Err(encode_error(id, "agent_prompt_failed", err.to_string()));
             }
         }
