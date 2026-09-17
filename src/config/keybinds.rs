@@ -1270,6 +1270,8 @@ pub(crate) fn parse_key_combo(s: &str) -> Option<KeyCombo> {
         "right" => KeyCode::Right,
         "up" => KeyCode::Up,
         "down" => KeyCode::Down,
+        "pageup" => KeyCode::PageUp,
+        "pagedown" => KeyCode::PageDown,
         "minus" => KeyCode::Char('-'),
         "comma" => KeyCode::Char(','),
         "period" => KeyCode::Char('.'),
@@ -1563,6 +1565,33 @@ prefix = "ö"
             parse_key_combo("ampersand"),
             Some((KeyCode::Char('&'), KeyModifiers::empty()))
         );
+    }
+
+    #[test]
+    fn page_keys_support_direct_and_prefix_bindings() {
+        for (name, code) in [("pageup", KeyCode::PageUp), ("pagedown", KeyCode::PageDown)] {
+            for (modifier, modifiers) in [
+                ("", KeyModifiers::empty()),
+                ("ctrl+", KeyModifiers::CONTROL),
+                ("alt+shift+", KeyModifiers::ALT | KeyModifiers::SHIFT),
+            ] {
+                for prefix in ["", "prefix+"] {
+                    let binding = format!("{prefix}{modifier}{name}");
+                    let config: Config =
+                        toml::from_str(&format!("[keys]\nnext_tab = {binding:?}")).unwrap();
+                    assert!(config.collect_diagnostics().is_empty(), "{binding}");
+                    let combo = (code, modifiers);
+                    let trigger = if prefix.is_empty() {
+                        BindingTrigger::Direct(combo)
+                    } else {
+                        BindingTrigger::Prefix(combo)
+                    };
+                    let keybinds = config.keybinds();
+                    assert_eq!(binding_triggers(&keybinds.next_tab), vec![trigger]);
+                    assert_eq!(keybinds.next_tab.label(), Some(binding));
+                }
+            }
+        }
     }
 
     #[test]
