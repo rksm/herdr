@@ -70,6 +70,7 @@ fn focused_last_overflow_tab_shows_its_full_label() {
             label: (*label).into(),
             custom_label: index > 0,
             zoomed: false,
+            marked: false,
             focused: index == 7,
             agent_status: AgentStatus::Idle,
         })
