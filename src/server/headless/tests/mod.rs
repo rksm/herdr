@@ -92,6 +92,7 @@ fn test_headless_server_with_event_hub(event_hub: api::EventHub) -> HeadlessServ
         terminal_attach_owners: HashMap::new(),
         pending_alt_screen_reads: Vec::new(),
         deferred_alt_screen_reads: Vec::new(),
+        pending_transcript_exports: Vec::new(),
         next_activity_stamp: 1,
         headless_size,
         effective_size: headless_size,
@@ -6911,4 +6912,138 @@ fn no_handle_internal_event_bypass_in_module() {
              handle_internal_event_with_forwarding (bypass risk):\n  {}",
         bypass_lines.join("\n  ")
     );
+}
+
+fn codex_transcript_test_screen() -> &'static [u8] {
+    "\x1b[?1049h\x1b[2J\x1b[H/ T R A N S C R I P T /\r\none\r\ntwo\r\nthree\r\nfour\r\n──── 100% ─\r\n ↑/↓ to scroll   pgup/pgdn to page   home/end to jump\r\n q close   esc to edit prev".as_bytes()
+}
+
+#[test]
+fn codex_transcript_export_only_defers_idle_codex_transcript_views() {
+    with_terminal_session_test_server(|server, terminal_id, _, public_pane_id| {
+        server.app.state.active = Some(0);
+        let (respond_to, _rx) = std::sync::mpsc::channel();
+        let msg = api::ApiRequestMessage {
+            request: api::schema::Request {
+                id: "edit".into(),
+                method: api::schema::Method::PaneEditScrollback(api::schema::PaneTarget {
+                    pane_id: public_pane_id,
+                }),
+            },
+            respond_to,
+            response_write_complete: None,
+            stream_active: None,
+        };
+        for (agent, state, screen, expected) in [
+            (
+                None,
+                crate::detect::AgentState::Idle,
+                codex_transcript_test_screen(),
+                false,
+            ),
+            (
+                Some(crate::detect::Agent::Claude),
+                crate::detect::AgentState::Idle,
+                codex_transcript_test_screen(),
+                false,
+            ),
+            (
+                Some(crate::detect::Agent::Codex),
+                crate::detect::AgentState::Working,
+                codex_transcript_test_screen(),
+                false,
+            ),
+            (
+                Some(crate::detect::Agent::Codex),
+                crate::detect::AgentState::Idle,
+                b"normal shell scrollback".as_slice(),
+                false,
+            ),
+            (
+                Some(crate::detect::Agent::Codex),
+                crate::detect::AgentState::Idle,
+                codex_transcript_test_screen(),
+                true,
+            ),
+        ] {
+            let terminal = server.app.state.terminals.get_mut(&terminal_id).unwrap();
+            terminal.detected_agent = agent;
+            terminal.state = state;
+            let (runtime, mut input) =
+                crate::terminal::TerminalRuntime::test_with_channel_and_scrollback_bytes(
+                    100, 8, 10000, screen, 16,
+                );
+            server
+                .app
+                .terminal_runtimes
+                .insert(terminal_id.clone(), runtime);
+            assert_eq!(server.defer_codex_transcript_export(&msg, None), expected);
+            assert!(
+                input.try_recv().is_err(),
+                "starting or rejecting a capture must not send keys yet"
+            );
+        }
+        assert_eq!(server.pending_transcript_exports.len(), 1);
+    });
+}
+
+#[test]
+fn codex_transcript_export_revalidates_focus_before_opening_editor() {
+    with_terminal_session_test_server(|server, terminal_id, _, public_pane_id| {
+        server.app.state.active = Some(0);
+        let terminal = server.app.state.terminals.get_mut(&terminal_id).unwrap();
+        terminal.detected_agent = Some(crate::detect::Agent::Codex);
+        terminal.state = crate::detect::AgentState::Idle;
+        let (runtime, mut input) =
+            crate::terminal::TerminalRuntime::test_with_channel_and_scrollback_bytes(
+                100,
+                8,
+                10000,
+                codex_transcript_test_screen(),
+                16,
+            );
+        server
+            .app
+            .terminal_runtimes
+            .insert(terminal_id.clone(), runtime);
+        let (respond_to, rx) = std::sync::mpsc::channel();
+        let msg = api::ApiRequestMessage {
+            request: api::schema::Request {
+                id: "edit".into(),
+                method: api::schema::Method::PaneEditScrollback(api::schema::PaneTarget {
+                    pane_id: public_pane_id,
+                }),
+            },
+            respond_to,
+            response_write_complete: None,
+            stream_active: None,
+        };
+        assert!(server.defer_codex_transcript_export(&msg, None));
+        server.app.state.active = None;
+        let terminal_count = server.app.state.terminals.len();
+        let mut now = Instant::now();
+        for _ in 0..100 {
+            now += Duration::from_millis(100);
+            assert!(!server.poll_transcript_exports(now));
+            while input.try_recv().is_ok() {
+                server
+                    .app
+                    .terminal_runtimes
+                    .get(&terminal_id)
+                    .unwrap()
+                    .test_process_pty_bytes(codex_transcript_test_screen());
+            }
+            if server.pending_transcript_exports.is_empty() {
+                break;
+            }
+        }
+        assert!(server.pending_transcript_exports.is_empty());
+        let response: serde_json::Value = serde_json::from_str(&rx.try_recv().unwrap()).unwrap();
+        assert_eq!(response["error"]["code"], "transcript_export_incomplete");
+        assert!(response["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("focus changed"));
+        assert_eq!(server.app.state.terminals.len(), terminal_count);
+    });
 }

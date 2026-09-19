@@ -89,6 +89,10 @@ Full-screen agents such as Claude Code and OpenCode render transcript history in
 
 Other reads remain passive. Herdr does not move the application viewport for `visible`, `detection`, or ANSI reads, output waits and subscriptions, a manually scrolled agent, a direct attachment, or an application that does not report mouse-wheel input. An explicit `agent read --lines N` that needs alternate-screen history returns `agent_not_idle` while the agent is working, blocked, or unknown; wait for idle and retry, or use `--source visible`. Other recent reads return the available screen and host scrollback as before.
 
+When Codex's transcript view is open (`Ctrl+T`), `prefix+e` collects the full transcript before opening `$EDITOR`. Herdr requires an idle Codex pane with the recognized transcript header and navigation controls. It collects older and newer text even when you start in the middle, then restores the original scroll position. Other panes keep their existing scrollback export behavior.
+
+Leave the pane idle during collection. Typing, resizing, or leaving the transcript view cancels the export. If collection or restoration fails, Herdr reports an incomplete export and does not open a partial file. Large transcripts can exceed the capture timeout.
+
 If a full response is still unavailable, ask the agent to write it as Markdown in a temporary directory and reply only with the file path, then read the file directly.
 
 Successful `agent start`, `agent prompt`, and `agent wait` commands return the current agent at `.result.agent`. `pane wait-output` returns `.result.pane_id`, `.result.matched_line`, and the matched snapshot at `.result.read`.

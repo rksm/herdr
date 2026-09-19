@@ -362,7 +362,7 @@ impl HeadlessServer {
         }
     }
 
-    fn focus_target_for_surface(
+    pub(super) fn focus_target_for_surface(
         &self,
         target: crate::ui::TabSurfaceTarget,
     ) -> Option<ShellFocusTarget> {
@@ -805,8 +805,19 @@ impl HeadlessServer {
     /// Applies a public socket request, including its session-wide focus projection.
     pub(super) fn handle_api_request_with_shutdown_check(
         &mut self,
-        mut msg: api::ApiRequestMessage,
+        msg: api::ApiRequestMessage,
     ) -> bool {
+        self.handle_api_request_with_scrollback(msg, None)
+    }
+
+    pub(super) fn handle_api_request_with_scrollback(
+        &mut self,
+        mut msg: api::ApiRequestMessage,
+        scrollback: Option<String>,
+    ) -> bool {
+        if scrollback.is_none() && self.defer_codex_transcript_export(&msg, None) {
+            return false;
+        }
         let target_before = self.default_shell_target();
         let popup_before = self.app.state.popup_pane.is_some();
         let method_claims_geometry = Self::public_request_may_change_geometry(&msg.request.method);
@@ -867,7 +878,7 @@ impl HeadlessServer {
                 (original, proxy_rx)
             });
         let reconcile = Self::shell_locations_may_need_reconcile(&msg.request.method);
-        let changed = self.handle_api_request_with_shutdown_check_inner(msg, false);
+        let changed = self.handle_api_request_with_shutdown_check_inner(msg, false, scrollback);
         let proxied_result = forward_proxied_api_response(response_proxy);
         let proxied_request_succeeded = proxied_result.is_some();
         // Same-tab and zoomed moves succeed without moving or requesting focus.
@@ -916,6 +927,18 @@ impl HeadlessServer {
         client_id: u64,
         msg: api::ApiRequestMessage,
     ) -> bool {
+        self.handle_client_shell_api_request_with_scrollback(client_id, msg, None)
+    }
+
+    pub(super) fn handle_client_shell_api_request_with_scrollback(
+        &mut self,
+        client_id: u64,
+        msg: api::ApiRequestMessage,
+        scrollback: Option<String>,
+    ) -> bool {
+        if scrollback.is_none() && self.defer_codex_transcript_export(&msg, Some(client_id)) {
+            return false;
+        }
         let focus_before = self.shell_focus_target(client_id);
         let focused_tabs_before = self.focused_shell_tabs();
         let method_claims_geometry = Self::shell_endpoint_claims_geometry(&msg.request.method);
@@ -926,7 +949,7 @@ impl HeadlessServer {
         self.set_default_shell_target_from_client(client_id);
         let popup_before = self.app.state.popup_pane.is_some();
         let popup_owner = self.shell_tab_id_for_client(client_id);
-        let changed = self.handle_api_request_with_shutdown_check_inner(msg, false);
+        let changed = self.handle_api_request_with_shutdown_check_inner(msg, false, scrollback);
         self.focus_shell_client_on_default_target(client_id);
         if !popup_before && self.app.state.popup_pane.is_some() {
             self.popup_owner_tab_id = popup_owner;
