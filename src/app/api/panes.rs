@@ -187,6 +187,15 @@ impl App {
     }
 
     pub(super) fn handle_pane_edit_scrollback(&mut self, id: String, target: PaneTarget) -> String {
+        self.handle_pane_edit_scrollback_with_text(id, target, None)
+    }
+
+    pub(crate) fn handle_pane_edit_scrollback_with_text(
+        &mut self,
+        id: String,
+        target: PaneTarget,
+        text: Option<&str>,
+    ) -> String {
         let Some((ws_idx, pane_id)) = self.parse_pane_id(&target.pane_id) else {
             return pane_not_found(id, &target.pane_id);
         };
@@ -200,7 +209,11 @@ impl App {
         if !is_focused {
             return encode_error(id, "stale_pane_target", "pane is no longer focused");
         }
-        match self.open_focused_scrollback_in_editor() {
+        let result = match text {
+            Some(text) => self.open_scrollback_text_in_editor(ws_idx, pane_id, text),
+            None => self.open_focused_scrollback_in_editor(),
+        };
+        match result {
             Ok(()) => encode_success(id, ResponseResult::Ok {}),
             Err(err) => encode_error(id, "scrollback_editor_failed", err.to_string()),
         }

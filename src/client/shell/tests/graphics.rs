@@ -260,6 +260,7 @@ fn every_dialog_and_menu_occludes_its_panel_not_the_whole_screen() {
             target: ClientContextMenuTarget::Tab {
                 tab_id: "tab_1".into(),
                 workspace_id: "ws_1".into(),
+                marked: false,
             },
             x: 35,
             y: 8,
