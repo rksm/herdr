@@ -324,7 +324,16 @@ impl App {
             .recent_unwrapped_text_snapshot(usize::MAX)
             .text;
 
-        let path = write_scrollback_temp_file(&scrollback)?;
+        self.open_scrollback_text_in_editor(ws_idx, pane_id, &scrollback)
+    }
+
+    pub(crate) fn open_scrollback_text_in_editor(
+        &mut self,
+        ws_idx: usize,
+        pane_id: crate::layout::PaneId,
+        scrollback: &str,
+    ) -> std::io::Result<()> {
+        let path = write_scrollback_temp_file(scrollback)?;
 
         let argv = match crate::platform::scrollback_editor_argv(&path) {
             Ok(argv) => argv,
