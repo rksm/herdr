@@ -1319,6 +1319,7 @@ pub struct PaneRuntime {
     io: PaneRuntimeIo,
     current_size: Cell<(u16, u16, u32, u32)>,
     user_input_received: Cell<bool>,
+    user_input_seq: Cell<u64>,
     child_pid: Arc<AtomicU32>,
     reported_cwd: Arc<Mutex<Option<std::path::PathBuf>>>,
     persistence_cwd: Mutex<Option<std::path::PathBuf>>,
@@ -2476,6 +2477,7 @@ impl PaneRuntime {
             terminal,
             io,
             user_input_received: Cell::new(false),
+            user_input_seq: Cell::new(0),
             current_size: Cell::new((rows, cols, cell_width_px, cell_height_px)),
             child_pid,
             reported_cwd,
@@ -3067,6 +3069,7 @@ impl PaneRuntime {
             terminal,
             io,
             user_input_received: Cell::new(false),
+            user_input_seq: Cell::new(0),
             current_size: Cell::new((rows, cols, 0, 0)),
             child_pid,
             reported_cwd,
@@ -3458,6 +3461,8 @@ impl PaneRuntime {
         self.io.try_send_bytes(bytes)?;
         if has_input {
             self.user_input_received.set(true);
+            self.user_input_seq
+                .set(self.user_input_seq.get().wrapping_add(1));
         }
         Ok(())
     }
@@ -3468,6 +3473,10 @@ impl PaneRuntime {
         bytes: Bytes,
     ) -> Result<(), mpsc::error::TrySendError<Bytes>> {
         self.io.try_send_bytes(bytes)
+    }
+
+    pub(crate) fn user_input_seq(&self) -> u64 {
+        self.user_input_seq.get()
     }
 
     pub(crate) fn user_input_received(&self) -> bool {
@@ -3491,6 +3500,8 @@ impl PaneRuntime {
             .queue_user_input_submission(text, enter, delay, deadline)?;
         if has_input {
             self.user_input_received.set(true);
+            self.user_input_seq
+                .set(self.user_input_seq.get().wrapping_add(1));
         }
         Ok(reply)
     }
@@ -3812,6 +3823,7 @@ impl PaneRuntime {
                     resize_tx,
                 },
                 user_input_received: Cell::new(false),
+                user_input_seq: Cell::new(0),
                 current_size: Cell::new((rows, cols, 0, 0)),
                 child_pid: Arc::new(AtomicU32::new(0)),
                 reported_cwd: Arc::new(Mutex::new(None)),
@@ -4965,17 +4977,21 @@ mod tests {
         let (runtime, mut input) = PaneRuntime::test_with_channel_capacity(80, 24, 1);
         runtime.try_send_bytes(Bytes::new()).unwrap();
         assert!(!runtime.user_input_received());
+        assert_eq!(runtime.user_input_seq(), 0);
         assert!(runtime.try_send_bytes(Bytes::from_static(b"full")).is_err());
         assert!(!runtime.user_input_received());
+        assert_eq!(runtime.user_input_seq(), 0);
         input.recv().await.unwrap();
         runtime
             .try_send_terminal_control(Bytes::from_static(b"\x1b[I"))
             .unwrap();
         input.recv().await.unwrap();
         assert!(!runtime.user_input_received());
+        assert_eq!(runtime.user_input_seq(), 0);
         runtime.try_send_paste("prompt".into()).unwrap();
         assert!(runtime.user_input_received());
         input.recv().await.unwrap();
+        assert_eq!(runtime.user_input_seq(), 1);
         runtime.reset_user_input_received();
         let reply = runtime
             .queue_user_input_submission(
@@ -4987,6 +5003,7 @@ mod tests {
             .unwrap();
         assert!(runtime.user_input_received());
         input.recv().await.unwrap();
+        assert_eq!(runtime.user_input_seq(), 2);
         // The bounded test channel may reject Enter; receipt means queue acceptance.
         drop(reply);
     }
@@ -5014,6 +5031,7 @@ mod tests {
                 resize_tx,
             },
             user_input_received: Cell::new(false),
+            user_input_seq: Cell::new(0),
             current_size: Cell::new((80, 24, 0, 0)),
             child_pid: Arc::new(AtomicU32::new(0)),
             reported_cwd: Arc::new(Mutex::new(None)),
@@ -5055,6 +5073,7 @@ mod tests {
                 resize_tx,
             },
             user_input_received: Cell::new(false),
+            user_input_seq: Cell::new(0),
             current_size: Cell::new((80, 24, 0, 0)),
             child_pid: Arc::new(AtomicU32::new(0)),
             reported_cwd: Arc::new(Mutex::new(None)),

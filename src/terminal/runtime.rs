@@ -473,6 +473,10 @@ impl TerminalRuntime {
         self.0.try_send_terminal_control(bytes)
     }
 
+    pub(crate) fn user_input_seq(&self) -> u64 {
+        self.0.user_input_seq()
+    }
+
     pub(crate) fn user_input_received(&self) -> bool {
         self.0.user_input_received()
     }

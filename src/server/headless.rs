@@ -81,6 +81,7 @@ mod notifications;
 mod render;
 mod retained_surface;
 mod surface_interest;
+mod transcript_export;
 
 pub use bootstrap::run_server;
 use lifecycle::wait_for_live_handoff_response_write;
@@ -221,6 +222,7 @@ pub struct HeadlessServer {
     pending_alt_screen_reads: Vec<crate::server::alt_screen_read::PendingAltScreenRead>,
     /// Reads waiting for an alternate-screen traversal of the same terminal to finish.
     deferred_alt_screen_reads: Vec<api::ApiRequestMessage>,
+    pending_transcript_exports: Vec<transcript_export::PendingExport>,
     /// Monotonic activity counter used to pick the most recently active client.
     next_activity_stamp: u64,
     /// Configured virtual terminal size used when no clients are connected.
@@ -358,6 +360,7 @@ impl HeadlessServer {
             terminal_attach_owners: HashMap::new(),
             pending_alt_screen_reads: Vec::new(),
             deferred_alt_screen_reads: Vec::new(),
+            pending_transcript_exports: Vec::new(),
             next_activity_stamp: 1,
             headless_size,
             effective_size: headless_size,
@@ -484,6 +487,11 @@ impl HeadlessServer {
                 crate::render_prof::event("full_render_cause.scheduled_tasks");
             }
 
+            if self.poll_transcript_exports(now) {
+                needs_render = true;
+                needs_full_render = true;
+                needs_graphics_render = false;
+            }
             self.poll_pending_alt_screen_reads(now);
             if self.process_deferred_alt_screen_reads() {
                 needs_render = true;
@@ -587,6 +595,13 @@ impl HeadlessServer {
                 .pending_alt_screen_reads
                 .iter()
                 .map(|pending| pending.next_deadline())
+                .fold(next_deadline, |deadline, pending| {
+                    Some(deadline.map_or(pending, |current| current.min(pending)))
+                });
+            let next_deadline = self
+                .pending_transcript_exports
+                .iter()
+                .map(|pending| pending.capture.next_deadline())
                 .fold(next_deadline, |deadline, pending| {
                     Some(deadline.map_or(pending, |current| current.min(pending)))
                 });
@@ -1715,6 +1730,10 @@ impl HeadlessServer {
             .pending_alt_screen_reads
             .iter()
             .any(|pending| pending.terminal_id == real_terminal_id)
+            || self
+                .pending_transcript_exports
+                .iter()
+                .any(|pending| pending.terminal_id == real_terminal_id)
         {
             self.send_to_client(
                 client_id,
@@ -2673,6 +2692,10 @@ impl HeadlessServer {
         let lines = lines.unwrap_or(80).min(1000) as usize;
         if lines == 0
             || self
+                .pending_transcript_exports
+                .iter()
+                .any(|pending| pending.terminal_id.as_str() == target.terminal_id)
+            || self
                 .terminal_attach_owners
                 .contains_key(target.terminal_id.as_str())
             || self
@@ -2811,6 +2834,7 @@ impl HeadlessServer {
         msg: api::ApiRequestMessage,
         skip_default_workspace_for_request: bool,
         client_local: bool,
+        scrollback: Option<String>,
     ) -> bool {
         if self.shutting_down {
             // During shutdown, respond with server_unavailable.
@@ -2993,6 +3017,14 @@ impl HeadlessServer {
                 })
                 .unwrap_or_else(|_| "{}".to_string())
             })
+        } else if let (api::schema::Method::PaneEditScrollback(target), Some(text)) =
+            (&msg.request.method, scrollback)
+        {
+            self.app.handle_pane_edit_scrollback_with_text(
+                msg.request.id.clone(),
+                target.clone(),
+                Some(&text),
+            )
         } else {
             self.app
                 .handle_api_request_after_internal_events_drained(msg.request)
