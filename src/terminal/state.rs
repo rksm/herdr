@@ -5342,6 +5342,7 @@ mod tests {
             source: "herdr:claude".into(),
             agent: "claude".into(),
             session_ref: crate::agent_resume::AgentSessionRef::id("claude-session").unwrap(),
+            started_with_full_permissions: false,
         });
         terminal.set_detected_state(Some(Agent::Grok), AgentState::Idle);
 

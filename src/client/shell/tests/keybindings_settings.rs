@@ -175,6 +175,7 @@ fn inactive_auto_named_tab_label_does_not_stack_terminal_faint() {
         label: "beta".into(),
         custom_label: false,
         zoomed: false,
+        marked: false,
         focused: false,
         agent_status: AgentStatus::Idle,
     });

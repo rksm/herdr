@@ -663,6 +663,8 @@ pub(in crate::client::shell) fn workspace_rows(
     )
 }
 
+// Both sidebar renderers pass the fork's marked-tab flag alongside the existing row inputs.
+#[allow(clippy::too_many_arguments)]
 pub(in crate::client::shell) fn render_workspace_rows(
     buffer: &mut Buffer,
     area: Rect,
