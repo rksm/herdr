@@ -10,8 +10,9 @@ use ratatui::{
 
 use super::*;
 
-pub(super) struct AgentRow {
+pub(super) struct AgentRow<'a> {
     pub(super) pane_id: String,
+    pub(super) workspace_id: &'a str,
     pub(super) status: crate::api::schema::AgentStatus,
     pub(super) focused: bool,
     pub(super) marked: bool,
@@ -81,9 +82,10 @@ pub(super) fn render_agent_panel(
         agent_scroll,
         hits,
         |row| row.rows.len(),
-        |buffer, rect, row, hits| {
+        |buffer, rect, row, next, hits| {
             hits.agents.push((rect, row.pane_id.clone()));
-            render_agent_row(buffer, rect, row, config);
+            let workspace_end = next.is_some_and(|next| row.workspace_id != next.workspace_id);
+            render_agent_row(buffer, rect, row, workspace_end, config);
         },
     );
 }
@@ -161,7 +163,7 @@ pub(super) fn render_agent_list<T>(
     agent_scroll: &mut usize,
     hits: &mut ShellHitMap,
     row_lines: impl Fn(&T) -> usize,
-    mut render_row: impl FnMut(&mut Buffer, Rect, &T, &mut ShellHitMap),
+    mut render_row: impl FnMut(&mut Buffer, Rect, &T, Option<&T>, &mut ShellHitMap),
 ) {
     let body = Rect::new(
         area.x,
@@ -218,7 +220,7 @@ pub(super) fn render_agent_list<T>(
             break;
         }
         let rect = Rect::new(body.x, y, content_width, height);
-        render_row(buffer, rect, row, hits);
+        render_row(buffer, rect, row, rows.get(index + 1), hits);
         y = y
             .saturating_add(height)
             .saturating_add(if index + 1 < rows.len() {
@@ -235,23 +237,23 @@ pub(super) fn render_agent_list<T>(
     }
 }
 
-pub(super) fn agent_rows(
-    snapshot: &ClientShellSnapshot,
+pub(super) fn agent_rows<'a>(
+    snapshot: &'a ClientShellSnapshot,
     config: &ClientShellConfig,
     machine: Option<&str>,
-) -> Vec<AgentRow> {
+) -> Vec<AgentRow<'a>> {
     ordered_agent_pane_ids(snapshot, config.agent_panel_sort)
         .into_iter()
         .filter_map(|pane_id| agent_row(snapshot, &pane_id, config, machine))
         .collect()
 }
 
-pub(super) fn agent_row(
-    snapshot: &ClientShellSnapshot,
+pub(super) fn agent_row<'a>(
+    snapshot: &'a ClientShellSnapshot,
     pane_id: &str,
     config: &ClientShellConfig,
     machine: Option<&str>,
-) -> Option<AgentRow> {
+) -> Option<AgentRow<'a>> {
     let agent = snapshot
         .agents
         .iter()
@@ -313,6 +315,7 @@ pub(super) fn agent_row(
     );
     Some(AgentRow {
         pane_id: agent.pane_id.clone(),
+        workspace_id: &agent.workspace_id,
         status: agent.agent_status,
         focused: agent.focused,
         marked: tab.is_some_and(|tab| tab.marked),
@@ -323,7 +326,8 @@ pub(super) fn agent_row(
 pub(super) fn render_agent_row(
     buffer: &mut Buffer,
     rect: Rect,
-    row: &AgentRow,
+    row: &AgentRow<'_>,
+    workspace_end: bool,
     config: &ClientShellConfig,
 ) {
     let palette = &config.palette;
@@ -385,7 +389,22 @@ pub(super) fn render_agent_row(
                 .saturating_sub(indent as u16)
                 .saturating_sub(mark_width) as usize,
         ));
-        Paragraph::new(Line::from(spans)).style(row_style).render(
+        let mut line = Line::from(spans);
+        if workspace_end
+            && config.agent_panel_sort == crate::config::AgentPanelSortConfig::Spaces
+            && index + 1 == rows.len()
+        {
+            // Use spare columns so workspace boundaries do not make the list taller.
+            let remaining = (rect.width as usize).saturating_sub(line.width() + 1);
+            if remaining >= 2 {
+                line.spans.push(ratatui::text::Span::raw(" "));
+                line.spans.push(ratatui::text::Span::styled(
+                    "─".repeat(remaining),
+                    Style::default().fg(palette.surface_dim),
+                ));
+            }
+        }
+        Paragraph::new(line).style(row_style).render(
             Rect::new(rect.x, rect.y + index as u16, rect.width, 1),
             buffer,
         );

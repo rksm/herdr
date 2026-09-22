@@ -1010,6 +1010,79 @@ fn active_workspace_is_the_only_highlight_when_machine_is_expanded() {
 }
 
 #[test]
+fn grouped_agent_dividers_keep_row_heights_and_respect_workspace_and_machine_boundaries() {
+    let mut local = snapshot();
+    let mut workspace = local.workspaces[0].clone();
+    workspace.workspace_id = "ws_2".into();
+    local.workspaces.push(workspace);
+    local.agents = (0..3)
+        .map(|index| {
+            let mut entry = agent("codex", AgentStatus::Idle, 1);
+            entry.pane_id = format!("pane_{}", index + 1);
+            entry.focused = index == 1;
+            if index == 2 {
+                entry.workspace_id = "ws_2".into();
+            }
+            entry
+        })
+        .collect();
+
+    let config = ClientShellConfig::from_config(&Config::default());
+    let area = Rect::new(0, 0, 30, 12);
+    let mut buffer = Buffer::empty(area);
+    let mut hits = ShellHitMap::default();
+    let mut scroll = 0;
+    super::super::agent_sidebar::render_agent_panel(
+        &mut buffer,
+        area,
+        &local,
+        &config,
+        &mut scroll,
+        &mut hits,
+    );
+    assert_eq!(hits.agents.len(), 3);
+    for (index, (rect, _)) in hits.agents.iter().enumerate() {
+        assert_eq!(rect.height, 2);
+        assert_eq!(rect.y, 3 + index as u16 * 2);
+        assert_eq!(
+            buffer[(rect.right() - 1, rect.bottom() - 1)].symbol() == "─",
+            index == 1
+        );
+    }
+
+    let mut state = ClientShellState::new(config);
+    let profile = remote_profile();
+    let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
+    state.set_endpoint_catalog(&[profile]);
+    state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
+    state.set_snapshot(Box::new(local.clone()));
+    state.set_pane_surface(surface());
+    // Reuse both the workspace ID and label on another machine.
+    let mut remote = local;
+    remote.boot_id = "remote-boot".into();
+    remote.agents = vec![remote.agents[2].clone()];
+    state.set_endpoint_snapshot(&endpoint_id, Box::new(remote));
+    for sort in [
+        crate::config::AgentPanelSortConfig::Spaces,
+        crate::config::AgentPanelSortConfig::Priority,
+    ] {
+        state.config.agent_panel_sort = sort;
+        let frame = state.compose(106, 40).expect("agent dividers");
+        let buffer = frame.to_ratatui_buffer().unwrap();
+        assert_eq!(state.hits.endpoint_agents.len(), 4);
+        for (index, (rect, _, _)) in state.hits.endpoint_agents.iter().enumerate() {
+            assert_eq!(rect.height, 2);
+            assert_eq!(rect.y, state.hits.agent_body.y + index as u16 * 2);
+            let divider = buffer[(rect.right() - 1, rect.bottom() - 1)].symbol() == "─";
+            assert_eq!(
+                divider,
+                sort == crate::config::AgentPanelSortConfig::Spaces && (index == 1 || index == 2)
+            );
+        }
+    }
+}
+
+#[test]
 fn aggregate_agents_use_configured_rows_machine_token_and_status_colors() {
     use crate::api::schema::AgentStatus;
     use crate::config::{AgentSidebarToken, StatusIndicatorStyle};
