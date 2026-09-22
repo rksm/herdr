@@ -71,8 +71,12 @@ pub(super) fn render_expanded(
         agent_scroll,
         hits,
         |row| row.agent.rows.len(),
-        |buffer, rect, row, hits| {
-            super::agent_sidebar::render_agent_row(buffer, rect, &row.agent, config);
+        |buffer, rect, row, next, hits| {
+            let workspace_end = next.is_some_and(|next| {
+                row.endpoint_id != next.endpoint_id
+                    || row.agent.workspace_id != next.agent.workspace_id
+            });
+            super::agent_sidebar::render_agent_row(buffer, rect, &row.agent, workspace_end, config);
             if row.stale {
                 buffer.set_style(
                     rect,
@@ -122,18 +126,18 @@ impl ClientShellState {
     }
 }
 
-struct EndpointAgentRow {
+struct EndpointAgentRow<'a> {
     endpoint_id: ClientEndpointId,
     machine_label: String,
     stale: bool,
-    agent: super::agent_sidebar::AgentRow,
+    agent: super::agent_sidebar::AgentRow<'a>,
 }
 
-fn agent_rows(
-    endpoints: &[ClientShellEndpoint],
+fn agent_rows<'a>(
+    endpoints: &'a [ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     config: &ClientShellConfig,
-) -> Vec<EndpointAgentRow> {
+) -> Vec<EndpointAgentRow<'a>> {
     let mut rendered_rows = endpoints
         .iter()
         .filter_map(|endpoint| {
