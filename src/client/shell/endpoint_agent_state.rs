@@ -54,6 +54,7 @@ impl EndpointAgentPresentation {
                 snapshot
                     .agents
                     .iter()
+                    .filter(|agent| agent.agent_status == AgentStatus::Idle)
                     .map(|agent| (agent.pane_id.clone(), agent.state_change_seq)),
             );
         }
@@ -88,19 +89,23 @@ impl EndpointAgentPresentation {
                 }
                 AgentStatus::Idle | AgentStatus::Done => {
                     let observed_work = self.working.remove(&agent.pane_id);
-                    let completed = completions.as_ref().map_or_else(
+                    let completion = completions.as_ref().map_or_else(
                         || {
-                            observed_work
+                            (agent.agent_status == AgentStatus::Done
+                                || observed_work
                                 || self.completed.get(&agent.pane_id)
-                                    == Some(&agent.state_change_seq)
+                                    == Some(&agent.state_change_seq))
+                            .then_some(agent.state_change_seq)
                         },
                         |completions| {
-                            completions.get(&agent.pane_id) == Some(&agent.state_change_seq)
+                            completions.get(&agent.pane_id).copied().filter(|seq| {
+                                // Restored unread work keeps its boot baseline through startup.
+                                *seq == 0 || *seq == agent.state_change_seq
+                            })
                         },
                     );
-                    if completed {
-                        self.completed
-                            .insert(agent.pane_id.clone(), agent.state_change_seq);
+                    if let Some(completion) = completion {
+                        self.completed.insert(agent.pane_id.clone(), completion);
                     } else {
                         self.completed.remove(&agent.pane_id);
                     }
@@ -138,9 +143,13 @@ impl EndpointAgentPresentation {
             else {
                 continue;
             };
-            let acknowledged = self.acknowledged.entry(agent.pane_id.clone()).or_default();
-            if *acknowledged < agent.state_change_seq {
-                *acknowledged = agent.state_change_seq;
+            if self
+                .acknowledged
+                .get(&agent.pane_id)
+                .is_none_or(|sequence| *sequence < agent.state_change_seq)
+            {
+                self.acknowledged
+                    .insert(agent.pane_id.clone(), agent.state_change_seq);
                 changed = true;
             }
         }
@@ -274,13 +283,62 @@ mod tests {
     }
 
     #[test]
-    fn first_snapshot_establishes_an_idle_baseline_without_server_seen_authority() {
-        let mut presentation = EndpointAgentPresentation::default();
-        let mut snapshot = snapshot(AgentStatus::Done, 4, 1);
+    fn first_snapshot_preserves_saved_unread_completion() {
+        for sequence in [0, 4] {
+            let mut presentation = EndpointAgentPresentation::default();
+            let mut snapshot = snapshot(AgentStatus::Done, sequence, 1);
 
-        presentation.project_snapshot(&mut snapshot);
+            presentation.project_snapshot(&mut snapshot);
 
-        assert_eq!(snapshot.agents[0].agent_status, AgentStatus::Idle);
+            assert_eq!(snapshot.agents[0].agent_status, AgentStatus::Done);
+            assert!(presentation.acknowledge_surface(&mut snapshot, &surface(1), Some(true)));
+            assert_eq!(snapshot.agents[0].agent_status, AgentStatus::Idle);
+        }
+    }
+
+    #[test]
+    fn restored_completion_survives_startup_with_independent_acknowledgements() {
+        let mut clients = [
+            EndpointAgentPresentation::default(),
+            EndpointAgentPresentation::default(),
+        ];
+        for (revision, status, sequence, completion) in [
+            (1, AgentStatus::Working, 1, Some(0)),
+            (2, AgentStatus::Done, 2, Some(0)),
+            (3, AgentStatus::Working, 3, Some(0)),
+            // The first client's focus has also marked the pane read on the server.
+            (4, AgentStatus::Idle, 4, Some(0)),
+            (5, AgentStatus::Working, 5, None),
+            (6, AgentStatus::Idle, 6, Some(6)),
+        ] {
+            for (index, client) in clients.iter_mut().enumerate() {
+                let mut snapshot = snapshot(status, sequence, revision);
+                client.receive_completions(
+                    None,
+                    completions(&snapshot.boot_id, revision, completion),
+                );
+                client.project_snapshot(&mut snapshot);
+                if matches!(revision, 2 | 4 | 6) {
+                    let expected = if revision == 4 && index == 0 {
+                        AgentStatus::Idle
+                    } else {
+                        AgentStatus::Done
+                    };
+                    assert_eq!(
+                        snapshot.agents[0].agent_status, expected,
+                        "client {index}, revision {revision}"
+                    );
+                }
+                if revision == 2 && index == 0 {
+                    assert!(client.acknowledge_surface(
+                        &mut snapshot,
+                        &surface(revision),
+                        Some(true)
+                    ));
+                    assert_eq!(snapshot.agents[0].agent_status, AgentStatus::Idle);
+                }
+            }
+        }
     }
 
     fn assert_idle_sequence(states: &[(AgentStatus, u64)]) {
