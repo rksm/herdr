@@ -566,6 +566,138 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn restored_unread_completion_survives_startup_and_acknowledgement() {
+        use crate::agent_resume::{AgentSessionRef, PersistedAgentSession};
+        use crate::api::schema::AgentStatus;
+        use crate::detect::{Agent, AgentState};
+        use crate::events::AppEvent;
+        use crate::terminal::TerminalRuntime;
+
+        for unread in [false, true] {
+            let mut app = test_app();
+            app.state.workspaces = vec![
+                crate::workspace::Workspace::test_new("active"),
+                crate::workspace::Workspace::test_new("restored"),
+            ];
+            app.state.active = Some(0);
+            app.state.ensure_test_terminals();
+            let pane_id = app.state.workspaces[1].tabs[0].root_pane;
+            let terminal_id = app.state.workspaces[1]
+                .terminal_id(pane_id)
+                .unwrap()
+                .clone();
+            let session_ref = AgentSessionRef::id("saved-codex-session").unwrap();
+            app.state
+                .terminals
+                .get_mut(&terminal_id)
+                .unwrap()
+                .set_persisted_agent_session(PersistedAgentSession {
+                    source: "herdr:codex".into(),
+                    agent: "codex".into(),
+                    session_ref: session_ref.clone(),
+                    started_with_full_permissions: false,
+                });
+            app.state.workspaces[1]
+                .pane_state_mut(pane_id)
+                .unwrap()
+                .seen = !unread;
+            let saved = crate::persist::capture(
+                &app.state.workspaces,
+                &app.state.terminals,
+                &app.terminal_runtimes,
+                app.state.active,
+                app.state.selected,
+            );
+            let saved = serde_json::from_str(&serde_json::to_string(&saved).unwrap()).unwrap();
+            let (workspaces, terminals, runtimes) = crate::persist::restore(
+                &saved,
+                None,
+                24,
+                80,
+                0,
+                &app.state.default_shell,
+                app.state.shell_mode,
+                true,
+                app.event_tx.clone(),
+                app.render_notify.clone(),
+                app.render_dirty.clone(),
+            );
+            app.state.workspaces = workspaces;
+            app.state.terminals = terminals;
+            app.terminal_runtimes = runtimes.into();
+            let pane_id = app.state.workspaces[1].tabs[0].root_pane;
+            let terminal_id = app.state.workspaces[1]
+                .terminal_id(pane_id)
+                .unwrap()
+                .clone();
+            let (runtime, mut input) = TerminalRuntime::test_with_channel(80, 24);
+            app.terminal_runtimes.insert(terminal_id.clone(), runtime);
+            app.handle_internal_event_with_pane_updates(AppEvent::AgentSessionReported {
+                pane_id,
+                source: "herdr:codex".into(),
+                agent_label: "codex".into(),
+                seq: Some(1),
+                session_ref: Some(session_ref),
+                session_start_source: Some("resume".into()),
+                started_with_full_permissions: false,
+            });
+            app.handle_internal_event_with_pane_updates(AppEvent::AgentProcessDetected {
+                pane_id,
+                agent: Agent::Codex,
+                observed_at: std::time::Instant::now(),
+            });
+            let state_event = |state| AppEvent::StateChanged {
+                pane_id,
+                agent: Some(Agent::Codex),
+                state,
+                visible_blocker: state == AgentState::Blocked,
+                visible_working: state == AgentState::Working,
+                process_exited: false,
+                observed_at: std::time::Instant::now(),
+            };
+            for acknowledge in [false, true] {
+                if acknowledge {
+                    app.state.active = Some(1);
+                    app.state.mark_active_tab_seen();
+                    app.state.active = Some(0);
+                }
+                for state in [AgentState::Working, AgentState::Blocked, AgentState::Idle] {
+                    app.handle_internal_event_with_pane_updates(state_event(state));
+                    assert_eq!(
+                        app.state.workspaces[1].pane_state(pane_id).unwrap().seen,
+                        !unread || acknowledge
+                    );
+                    let agent = app.agent_info(1, pane_id).unwrap();
+                    assert_eq!(agent.completion_seq, unread.then_some(0));
+                    if state == AgentState::Idle {
+                        assert_eq!(
+                            agent.agent_status,
+                            if unread && !acknowledge {
+                                AgentStatus::Done
+                            } else {
+                                AgentStatus::Idle
+                            }
+                        );
+                    }
+                }
+            }
+            app.terminal_runtimes
+                .get(&terminal_id)
+                .unwrap()
+                .try_send_bytes(Bytes::from_static(b"do work\r"))
+                .unwrap();
+            input.recv().await.unwrap();
+            app.handle_internal_event_with_pane_updates(state_event(AgentState::Working));
+            assert!(app.agent_info(1, pane_id).unwrap().completion_seq.is_none());
+            app.handle_internal_event_with_pane_updates(state_event(AgentState::Idle));
+            let agent = app.agent_info(1, pane_id).unwrap();
+            assert_eq!(agent.agent_status, AgentStatus::Done);
+            assert!(agent.completion_seq.is_some_and(|seq| seq > 0));
+            app.state.assert_invariants_for_test();
+        }
+    }
+
     #[cfg(unix)]
     fn long_running_test_argv() -> Vec<String> {
         vec!["/bin/sh".into(), "-c".into(), "sleep 5".into()]
