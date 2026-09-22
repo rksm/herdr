@@ -30,6 +30,8 @@ This is the strongest persistence path because the original processes never stop
 
 If the Herdr server stops and starts again, the original pane processes are gone. Herdr restores the saved session shape: workspaces, tabs, panes, cwd, layout, and focus.
 
+Saved unread marks survive server restart. Agent startup keeps those marks and does not mark previously read agents as unread. Reading a restored pane clears its mark. The next completed task can mark it unread again.
+
 Snapshot restore does not preserve running shells, servers, tests, or arbitrary processes. Panes that cannot use a stronger restore path come back as new shells in their saved directories.
 
 If a saved directory is unavailable or the shell cannot start, the pane stays in the layout with an error instead of disappearing or moving to your home directory. Its saved directory and agent session reference remain intact. Fix the directory or shell configuration and restart the server to retry, or explicitly close the pane to remove it.
