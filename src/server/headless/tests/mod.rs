@@ -7540,6 +7540,7 @@ fn completion_guard_api_session_replacement_does_not_notify_finished() {
                 source: "herdr:pi".into(),
                 agent: "pi".into(),
                 session_ref: old_session.clone(),
+                started_with_full_permissions: false,
             });
             terminal
                 .set_hook_authority_with_session_ref(
@@ -7563,6 +7564,7 @@ fn completion_guard_api_session_replacement_does_not_notify_finished() {
                     agent_session_path: Some(new_session.clone()),
                     resume_argv: None,
                     session_start_source: Some(reason.into()),
+                    permission_mode: None,
                 }),
             );
             let mut report = PaneReportAgentParams {
