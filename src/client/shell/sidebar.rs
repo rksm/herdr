@@ -735,11 +735,7 @@ pub(in crate::client::shell) fn render_workspace_rows(
                 area.right(),
                 "★ ",
                 Style::default()
-                    .fg(if workspace.focused {
-                        palette.text
-                    } else {
-                        palette.mauve
-                    })
+                    .fg(if focused { palette.text } else { palette.mauve })
                     .add_modifier(Modifier::BOLD),
             );
         }

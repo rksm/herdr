@@ -3241,6 +3241,7 @@ mod tests {
                 seq: Some(seq),
                 session_ref: crate::agent_resume::AgentSessionRef::id(session),
                 session_start_source: Some(reason.into()),
+                started_with_full_permissions: false,
             });
             if seq == 1 {
                 for state in [AgentState::Working, AgentState::Idle] {
