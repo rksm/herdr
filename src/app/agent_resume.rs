@@ -605,6 +605,7 @@ mod tests {
                 source: "herdr:codex".into(),
                 agent: "codex".into(),
                 session_ref: crate::agent_resume::AgentSessionRef::id("resume-test").unwrap(),
+                started_with_full_permissions: false,
             };
             terminal.persisted_agent_session = Some(session.clone());
             terminal.pending_agent_resume_plan = Some(crate::agent_resume::AgentResumePlan {
