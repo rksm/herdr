@@ -505,6 +505,7 @@ fn restore_tab(
     for id in &pane_ids {
         let old_id = reverse_id_map.get(id);
         let saved_pane = old_id.and_then(|old_id| snap.panes.get(old_id));
+        let unread_done = saved_pane.is_some_and(|pane| pane.unread_done);
         let saved_cwd = saved_pane
             .map(|p| p.cwd.clone())
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| "/".into()));
@@ -574,6 +575,8 @@ fn restore_tab(
             let terminal_id = TerminalId::alloc();
             let mut terminal = TerminalState::new(terminal_id.clone(), cwd.clone())
                 .with_pending_agent_resume_plan(plan);
+            // Zero identifies saved unread work before this boot's first state change.
+            terminal.last_agent_completion_seq = unread_done.then_some(0);
             if let Some(label) = saved_label {
                 terminal.set_manual_label(label);
             }
@@ -601,7 +604,7 @@ fn restore_tab(
             panes.insert(
                 *id,
                 PaneState {
-                    seen: !saved_pane.is_some_and(|pane| pane.unread_done),
+                    seen: !unread_done,
                     ..PaneState::new(terminal_id)
                 },
             );
@@ -672,6 +675,7 @@ fn restore_tab(
             Ok(runtime) => {
                 let terminal_id = TerminalId::alloc();
                 let mut terminal = TerminalState::new(terminal_id.clone(), cwd.clone());
+                terminal.last_agent_completion_seq = unread_done.then_some(0);
                 if was_imported {
                     if let Some(argv) = saved_launch_argv {
                         terminal = terminal.with_launch_argv(argv).with_respawn_shell_on_exit();
@@ -710,7 +714,7 @@ fn restore_tab(
                 panes.insert(
                     *id,
                     PaneState {
-                        seen: !saved_pane.is_some_and(|pane| pane.unread_done),
+                        seen: !unread_done,
                         ..PaneState::new(terminal_id.clone())
                     },
                 );

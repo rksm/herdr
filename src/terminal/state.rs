@@ -258,7 +258,8 @@ impl TerminalState {
             return true;
         }
         let reached_idle = self.agent_process_acquisition_pending && self.state == AgentState::Idle;
-        let suppress_completion = reached_idle && self.recent_agent_process_exit.is_none();
+        let suppress_completion =
+            self.agent_process_acquisition_pending && self.recent_agent_process_exit.is_none();
         if reached_idle {
             self.agent_process_acquisition_pending = false;
         }

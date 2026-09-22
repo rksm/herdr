@@ -1680,7 +1680,10 @@ impl AppState {
                 || mutation
                     .effective_state_change
                     .as_ref()
-                    .is_some_and(|change| change.previous_agent_label != change.agent_label);
+                    .is_some_and(|change| {
+                        change.previous_agent_label.is_some()
+                            && change.previous_agent_label != change.agent_label
+                    });
             if completion_reset {
                 terminal.last_agent_completion_seq = None;
             }
@@ -1703,6 +1706,9 @@ impl AppState {
         if completion_reset {
             self.pending_agent_notifications.remove(&pane_id);
             self.workspaces[ws_idx].pane_state_mut(pane_id)?.seen = true;
+            if !previous_seen {
+                self.mark_session_dirty();
+            }
         }
         if mutation.session_ref_changed || managed_changed || agent_name_changed {
             self.mark_session_dirty();
@@ -1715,9 +1721,11 @@ impl AppState {
             self.next_agent_state_change_seq += 1;
             if let Some(terminal) = self.terminals.get_mut(&terminal_id) {
                 terminal.last_agent_state_change_seq = Some(self.next_agent_state_change_seq);
-                terminal.last_agent_completion_seq = (!suppress_completion
-                    && is_completion_transition(&change))
-                .then_some(self.next_agent_state_change_seq);
+                if !suppress_acquisition_completion {
+                    terminal.last_agent_completion_seq = (!suppress_completion
+                        && is_completion_transition(&change))
+                    .then_some(self.next_agent_state_change_seq);
+                }
             }
         }
         let seen = self.apply_pane_state_change(ws_idx, pane_id, &change, suppress_completion)?;
@@ -3298,12 +3306,20 @@ mod tests {
             .get_mut(&pane_id)
             .unwrap()
             .seen = false;
+        let terminal_id = state.workspaces[1].terminal_id(pane_id).cloned().unwrap();
+        let terminal = state.terminals.get_mut(&terminal_id).unwrap();
+        terminal.set_detected_state(Some(Agent::Codex), AgentState::Idle);
+        terminal.last_agent_completion_seq = Some(0);
         state.handle_app_event(AppEvent::AgentProcessDetected {
             pane_id,
             agent: Agent::Codex,
             observed_at: Instant::now(),
         });
         assert!(!state.workspaces[1].pane_state(pane_id).unwrap().seen);
+        assert_eq!(
+            state.terminals[&terminal_id].last_agent_completion_seq,
+            Some(0)
+        );
         let event = |agent_state| AppEvent::StateChanged {
             pane_id,
             agent: Some(Agent::Codex),
@@ -3315,10 +3331,20 @@ mod tests {
         };
         state.handle_app_event(event(AgentState::Idle));
         assert!(!state.workspaces[1].pane_state(pane_id).unwrap().seen);
+        assert_eq!(
+            state.terminals[&terminal_id].last_agent_completion_seq,
+            Some(0)
+        );
         state.handle_app_event(event(AgentState::Working));
         assert!(state.workspaces[1].pane_state(pane_id).unwrap().seen);
+        assert!(state.terminals[&terminal_id]
+            .last_agent_completion_seq
+            .is_none());
         state.handle_app_event(event(AgentState::Idle));
         assert!(!state.workspaces[1].pane_state(pane_id).unwrap().seen);
+        assert!(state.terminals[&terminal_id]
+            .last_agent_completion_seq
+            .is_some_and(|seq| seq > 0));
         state.assert_invariants_for_test();
     }
 

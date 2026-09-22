@@ -7314,6 +7314,73 @@ fn completion_guard_api_startup_blocker_respects_suppression() {
 }
 
 #[test]
+fn completion_guard_restored_unread_hooks_do_not_notify_finished() {
+    use api::schema::{Method, PaneAgentState, PaneReportAgentParams};
+    use protocol::SemanticNotificationKind::Finished;
+
+    let (writer, control_rx, _render_rx) = test_client_writer();
+    let (mut server, pane_id) = completion_guard_server(writer);
+    let terminal_id = server.app.state.workspaces[0]
+        .terminal_id(pane_id)
+        .cloned()
+        .unwrap();
+    let terminal = server.app.state.terminals.get_mut(&terminal_id).unwrap();
+    terminal.resumed_agent_waiting_for_input = true;
+    terminal.last_agent_completion_seq = Some(0);
+    server.app.state.workspaces[0]
+        .pane_state_mut(pane_id)
+        .unwrap()
+        .seen = false;
+    let public_pane_id = server.app.public_pane_id(0, pane_id).unwrap();
+    for seq in 1..=4 {
+        if seq == 3 {
+            server
+                .app
+                .state
+                .terminals
+                .get_mut(&terminal_id)
+                .unwrap()
+                .record_resumed_agent_input();
+        }
+        completion_guard_api_report(
+            &mut server,
+            Method::PaneReportAgent(PaneReportAgentParams {
+                pane_id: public_pane_id.clone(),
+                source: "custom:pi".into(),
+                agent: "pi".into(),
+                state: if seq % 2 == 1 {
+                    PaneAgentState::Working
+                } else {
+                    PaneAgentState::Idle
+                },
+                message: None,
+                seq: Some(seq),
+                agent_session_id: None,
+                agent_session_path: None,
+            }),
+        );
+        let notifications = completion_guard_notifications(&mut server, &control_rx);
+        assert_eq!(
+            notifications.contains(&Finished),
+            seq == 4,
+            "hook {seq}: {notifications:?}"
+        );
+        if seq <= 2 {
+            assert_eq!(
+                server.app.state.terminals[&terminal_id].last_agent_completion_seq,
+                Some(0)
+            );
+            assert!(
+                !server.app.state.workspaces[0]
+                    .pane_state(pane_id)
+                    .unwrap()
+                    .seen
+            );
+        }
+    }
+}
+
+#[test]
 fn completion_guard_api_session_replacement_does_not_notify_finished() {
     use crate::agent_resume::{AgentSessionRef, PersistedAgentSession};
     use crate::detect::{Agent, AgentState};

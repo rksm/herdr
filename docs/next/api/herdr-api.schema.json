@@ -6633,7 +6633,7 @@
               "$ref": "#/schemas/success_response/$defs/AgentStatus"
             },
             "completion_seq": {
-              "description": "The current idle transition completed work, independently of who has viewed it.",
+              "description": "Completed work, independently of who has viewed it. Zero preserves saved unread\nwork during restore; a fresh completion matches the current state_change_seq.",
               "format": "uint64",
               "minimum": 0,
               "type": [

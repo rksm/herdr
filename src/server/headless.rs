@@ -3111,7 +3111,9 @@ impl HeadlessServer {
             let new_state = terminal_after.state;
             if new_state == *prev_state
                 || (new_state == crate::detect::AgentState::Idle
-                    && terminal_after.last_agent_completion_seq.is_none())
+                    && terminal_after
+                        .last_agent_completion_seq
+                        .is_none_or(|seq| Some(seq) != terminal_after.last_agent_state_change_seq))
             {
                 continue;
             }
