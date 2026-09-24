@@ -842,6 +842,12 @@
           "description": "Toggle sidebar collapse."
         },
         {
+          "key": "keys.toggle_agent_sort",
+          "type": "keybinding",
+          "default": "\"prefix+shift+a\"",
+          "description": "Toggle the agent panel between grouped and priority order. Herdr saves this preference for the client. Clear any custom agent view before changing the order."
+        },
+        {
           "key": "keys.indexed.tabs",
           "type": "string",
           "default": "unset",

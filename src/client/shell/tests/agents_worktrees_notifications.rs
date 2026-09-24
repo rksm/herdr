@@ -772,7 +772,6 @@ fn agent_sort_toggle_is_client_local_and_persists_per_endpoint() {
     state.set_pane_surface(surface());
     state.compose(106, 30).expect("agent sidebar frame");
     let toggle = state.hits.agent_sort_toggle;
-
     let click = state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
         column: toggle.x,
@@ -794,6 +793,59 @@ fn agent_sort_toggle_is_client_local_and_persists_per_endpoint() {
     );
     assert!(reloaded.agent_panel_sort_manual);
     std::fs::remove_file(path).expect("remove agent sort preferences");
+}
+
+#[test]
+fn agent_sort_shortcut_handles_default_and_custom_bindings() {
+    for (settings, input) in [
+        ("", b"\x02A".as_slice()),
+        ("[keys]\ntoggle_agent_sort = 'alt+s'", b"\x1bs".as_slice()),
+    ] {
+        let config: Config = toml::from_str(settings).expect("shortcut config");
+        let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+        state.set_snapshot(Box::new(snapshot()));
+        for expected in [
+            crate::config::AgentPanelSortConfig::Priority,
+            crate::config::AgentPanelSortConfig::Spaces,
+        ] {
+            state.agent_scroll = 5;
+            let outcome = state.handle_input_bytes(input);
+            assert_eq!(state.config.agent_panel_sort, expected);
+            assert!(state.agent_panel_sort_manual);
+            assert_eq!(state.agent_scroll, 0);
+            assert!(outcome.repaint);
+            assert!(outcome.actions.is_empty());
+            assert!(outcome.requests.is_empty());
+        }
+    }
+}
+
+#[test]
+fn agent_sort_shortcut_preserves_preferences_during_custom_view() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    let mut projected = snapshot();
+    projected.agent_view_label = Some("review".into());
+    state.set_snapshot(Box::new(projected));
+    state.agent_scroll = 5;
+    let outcome = state.handle_input_bytes(b"\x02A");
+    assert_eq!(
+        state.config.agent_panel_sort,
+        crate::config::AgentPanelSortConfig::Spaces
+    );
+    assert!(!state.agent_panel_sort_manual);
+    assert_eq!(state.agent_scroll, 5);
+    assert!(outcome.actions.is_empty());
+    assert!(outcome.requests.is_empty());
+    assert!(outcome.repaint);
+    assert_eq!(
+        state
+            .visible_endpoint_notice
+            .as_ref()
+            .expect("custom view notice")
+            .key
+            .code,
+        "agent_sort_custom_view"
+    );
 }
 
 #[test]
