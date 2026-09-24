@@ -19,6 +19,33 @@ impl ClientShellState {
                 outcome.resize = true;
                 self.persist_chrome_preferences(outcome);
             }
+            crate::input::KeybindMatch::Action(crate::input::KeybindAction::ToggleAgentSort) => {
+                if self
+                    .snapshot
+                    .as_deref()
+                    .is_some_and(|snapshot| snapshot.agent_view_label.is_some())
+                {
+                    outcome.repaint |= self.push_endpoint_notice(
+                        ClientEndpointNoticeKind::Rejected,
+                        "agent_sort_custom_view",
+                        "Custom agent view active",
+                        "Clear the custom agent view before changing agent order",
+                    );
+                    return;
+                }
+                self.config.agent_panel_sort = match self.config.agent_panel_sort {
+                    crate::config::AgentPanelSortConfig::Spaces => {
+                        crate::config::AgentPanelSortConfig::Priority
+                    }
+                    crate::config::AgentPanelSortConfig::Priority => {
+                        crate::config::AgentPanelSortConfig::Spaces
+                    }
+                };
+                self.agent_panel_sort_manual = true;
+                self.agent_scroll = 0;
+                self.persist_chrome_preferences(outcome);
+                outcome.repaint = true;
+            }
             crate::input::KeybindMatch::Action(action) => {
                 if self.workspace_preview_action_blocked()
                     && matches!(
