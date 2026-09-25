@@ -138,7 +138,6 @@ impl HeadlessServer {
                         request: pending.request,
                         respond_to: pending.respond_to,
                         response_write_complete: None,
-                        stream_active: None,
                     };
                     changed |= match pending.client {
                         Some((id, _)) => self.handle_client_shell_api_request_with_scrollback(
