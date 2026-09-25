@@ -7729,7 +7729,6 @@ fn codex_transcript_export_only_defers_idle_codex_transcript_views() {
             },
             respond_to,
             response_write_complete: None,
-            stream_active: None,
         };
         for (agent, state, screen, expected) in [
             (
@@ -7813,7 +7812,6 @@ fn codex_transcript_export_revalidates_focus_before_opening_editor() {
             },
             respond_to,
             response_write_complete: None,
-            stream_active: None,
         };
         assert!(server.defer_codex_transcript_export(&msg, None));
         server.app.state.active = None;

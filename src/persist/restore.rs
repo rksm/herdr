@@ -1833,6 +1833,7 @@ mod tests {
             terminal.set_persisted_agent_session(crate::agent_resume::PersistedAgentSession {
                 source: "herdr:pi".into(),
                 agent: "pi".into(),
+                started_with_full_permissions: false,
                 session_ref: crate::agent_resume::AgentSessionRef::path(
                     "/var/tmp/handoff-test.jsonl",
                 )
