@@ -1354,6 +1354,7 @@ mod tests {
             agent: "pi".into(),
             kind: crate::agent_resume::AgentSessionRefKind::Path,
             value: test_session_path("pi-session.jsonl"),
+            started_with_full_permissions: false,
         };
         let resume = super::super::snapshot::PaneAgentResumeSnapshot {
             source: "herdr:pi".into(),
@@ -2059,6 +2060,7 @@ mod tests {
             terminal.set_persisted_agent_session(crate::agent_resume::PersistedAgentSession {
                 source: "herdr:pi".into(),
                 agent: "pi".into(),
+                started_with_full_permissions: false,
                 session_ref: crate::agent_resume::AgentSessionRef::path(
                     "/var/tmp/handoff-test.jsonl",
                 )

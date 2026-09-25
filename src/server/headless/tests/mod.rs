@@ -7698,6 +7698,7 @@ fn api_report_agent_stores_valid_resume_argv_and_rejects_invalid() {
                     agent_session_path: None,
                     session_start_source: None,
                     resume_argv: Some(vec!["intruder".into()]),
+                    permission_mode: None,
                 },
             ),
         },
@@ -7740,6 +7741,7 @@ fn api_resume_argv_is_ignored_when_its_session_report_is_refused() {
             agent_session_path: None,
             session_start_source: None,
             resume_argv: Some(vec!["claude".into(), "--resume".into(), session.into()]),
+            permission_mode: None,
         })
     };
 
@@ -7869,6 +7871,7 @@ fn completion_guard_restored_unread_hooks_do_not_notify_finished() {
                 seq: Some(seq),
                 agent_session_id: None,
                 agent_session_path: None,
+                resume_argv: None,
             }),
         );
         let notifications = completion_guard_notifications(&mut server, &control_rx);
@@ -8244,7 +8247,6 @@ fn codex_transcript_export_only_defers_idle_codex_transcript_views() {
             },
             respond_to,
             response_write_complete: None,
-            stream_active: None,
         };
         for (agent, state, screen, expected) in [
             (
@@ -8328,7 +8330,6 @@ fn codex_transcript_export_revalidates_focus_before_opening_editor() {
             },
             respond_to,
             response_write_complete: None,
-            stream_active: None,
         };
         assert!(server.defer_codex_transcript_export(&msg, None));
         server.app.state.active = None;
