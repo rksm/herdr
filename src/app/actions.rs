@@ -3834,6 +3834,7 @@ mod tests {
                 seq: Some(seq),
                 session_ref: crate::agent_resume::AgentSessionRef::id(session),
                 session_start_source: Some("startup".into()),
+                started_with_full_permissions: false,
             });
             state.handle_app_event(AppEvent::HookStateReported {
                 pane_id,
