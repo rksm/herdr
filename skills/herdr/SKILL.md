@@ -134,7 +134,7 @@ Use the kind requested by the user. Run `herdr agent` to inspect the installed k
 herdr agent start reviewer --kind codex --pane <returned-pane-id> -- <agent-args...>
 ```
 
-A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. If the agent is blocked during startup, the command returns `agent_not_ready` immediately but keeps the name available for `agent read` and `agent send-keys`. Wait until the agent becomes idle before prompting it. Startup defaults to a 30-second timeout.
+A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. If Herdr recognizes a blocked startup dialog, the command returns `agent_not_ready` immediately but keeps the name available for `agent read` and `agent send-keys`. An unrecognized dialog can instead cause a startup timeout and clear the name while the process keeps running. Inspect the recorded pane with `pane read --source visible` before retrying. Confirm that the agent is ready for input before prompting it. Startup defaults to a 30-second timeout.
 
 Submit work through the agent surface:
 
@@ -142,7 +142,7 @@ Submit work through the agent surface:
 herdr agent prompt reviewer "Review the current diff and report only actionable findings." --wait --timeout 120000
 ```
 
-`agent prompt` honors the pane's live bracketed-paste mode and sends text followed by encoded Enter as one ordered submission. It reports successful submission only after both have been written; that alone does not prove the agent started a turn. For Codex on Windows, Herdr sends a paste boundary before Enter so submission does not depend on prompt size. It rejects an agent already waiting at an approval or question dialog with `agent_blocked` before sending any input. Inspect the blocked UI and ask the user before answering it. For normal agent work, `--wait` is enough: it waits for the first settled `idle`, `done`, or `blocked` state. Do not repeat those defaults with `--until`.
+`agent prompt` honors the pane's live bracketed-paste mode and sends text followed by encoded Enter as one ordered submission. It reports successful submission only after both have been written; that alone does not prove the agent started a turn. For Codex on Windows, Herdr sends a paste boundary before Enter so submission does not depend on prompt size. It rejects an agent already waiting at an approval or question dialog with `agent_blocked` before sending any input. Inspect the blocked UI and answer through its displayed controls using known context and existing authorization. Ask the user when a required decision or fact is missing. For normal agent work, `--wait` is enough: it waits for the first settled `idle`, `done`, or `blocked` state. Do not repeat those defaults with `--until`.
 
 With `--wait`, a prompt sent from a non-working state must produce observed `working` or `blocked` activity. After submission, Herdr waits up to five seconds for that activity; unrelated `idle`, `done`, or session changes do not satisfy this gate. It returns `agent_prompt_stalled` if no activity is observed, or `timeout` if the caller's timeout expires first. The caller timeout includes submission time. Without a timeout, the settled-state wait is indefinite after activity is observed. This wait tracks lifecycle state, not an individual turn; if the agent is already working, completion of the active turn may satisfy it.
 
@@ -199,7 +199,7 @@ Use `--format ansi` when colors and terminal styling are evidence. Otherwise use
 
 `--lines` asks Herdr for more rows from the pane's available screen and host scrollback. Alternate-screen rows do not enter ordinary host scrollback. For supported idle agents, Herdr can collect application-owned history and restore the viewport afterward, but not every application or response can be recovered this way.
 
-If a larger recent read still does not reveal the completed response, ask the agent to write it as Markdown in a temporary directory and reply only with the file path, then read that file on the same machine. Use this only as a fallback; do not request file output in the initial prompt.
+If a larger recent read still does not reveal the completed response, ask the agent to write it as Markdown in a temporary directory. Ask it to reply only with the file path, then read that file on the same machine. Use this only as a fallback for the chat report. Request deliverable files in the initial prompt when the task needs them.
 
 ## Safety and coordination rules
 
