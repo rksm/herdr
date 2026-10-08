@@ -519,6 +519,13 @@ droid = "off"
 claude = "on"
 ```
 
+To mute agents in some tabs, list tab name prefixes. Their status indicators and toasts still appear.
+
+```toml
+[ui.sound]
+muted_tab_prefixes = ["[sub"]
+```
+
 ## Advanced configuration
 
 Search the [Config reference](/docs/config-reference/) for scrollback limits, nested launches, and other advanced or experimental settings. See [Session state and restore](/docs/session-state/) before enabling pane screen history; that guide explains the security trade-off of saving pane contents.
