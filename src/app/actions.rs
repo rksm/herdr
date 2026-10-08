@@ -384,6 +384,20 @@ impl AppState {
             .is_some_and(|tab_idx| tab_idx == self.workspaces[ws_idx].active_tab)
     }
 
+    /// Agents in tabs matching `ui.sound.muted_tab_prefixes` keep their status
+    /// dots and toasts but play no sound.
+    pub(crate) fn pane_sound_muted(&self, pane_id: PaneId) -> bool {
+        self.workspaces.iter().any(|ws| {
+            ws.tabs.iter().any(|tab| {
+                tab.panes.contains_key(&pane_id)
+                    && tab
+                        .custom_name
+                        .as_deref()
+                        .is_some_and(|name| self.sound.mutes_tab(name))
+            })
+        })
+    }
+
     pub fn switch_workspace(&mut self, idx: usize) {
         if idx < self.workspaces.len() {
             let previous_focus = self.current_pane_focus_target();
@@ -1996,7 +2010,7 @@ impl AppState {
         let suppress_active_tab_notifications =
             active_tab_suppresses_notifications(is_active_tab, self.outer_terminal_focus);
         let sound = sound_for_toast_kind(kind, suppress_active_tab_notifications)
-            .filter(|_| self.sound.allows(known_agent));
+            .filter(|_| self.sound.allows(known_agent) && !self.pane_sound_muted(pane_id));
         let build_toast = || {
             let workspace_label =
                 self.workspaces[ws_idx].display_name_from_terminals(&self.terminals);
@@ -4479,6 +4493,18 @@ mod tests {
         assert!(active_tab_suppresses_notifications(true, Some(true)));
         assert!(!active_tab_suppresses_notifications(true, Some(false)));
         assert!(!active_tab_suppresses_notifications(false, None));
+    }
+
+    #[test]
+    fn panes_in_muted_prefix_tabs_are_sound_muted() {
+        let mut state = AppState::test_new();
+        state.sound.muted_tab_prefixes = vec!["[sub".into()];
+        state.workspaces = vec![crate::workspace::Workspace::test_new("ws")];
+        let pane_id = state.workspaces[0].tabs[0].root_pane;
+        assert!(!state.pane_sound_muted(pane_id));
+
+        state.workspaces[0].tabs[0].custom_name = Some("[sub] review".into());
+        assert!(state.pane_sound_muted(pane_id));
     }
 
     #[test]

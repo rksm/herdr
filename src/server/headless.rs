@@ -3242,7 +3242,9 @@ impl HeadlessServer {
 
             // Forward sound notification when server-side sound policy allows it.
             // Clients still decide locally whether they can execute the side effect.
-            if self.app.state.toast_config.delay_seconds == 0 && self.app.state.sound.allows(agent)
+            if self.app.state.toast_config.delay_seconds == 0
+                && self.app.state.sound.allows(agent)
+                && !self.app.state.pane_sound_muted(*pane_id)
             {
                 if let Some(sound) = crate::app::actions::notification_sound_for_state_change(
                     suppress_active_tab_notifications,

@@ -19,6 +19,8 @@ pub struct SoundConfig {
     /// Optional mp3 file path for "request" notifications.
     /// Relative paths are resolved from the config file's directory.
     pub request_path: Option<PathBuf>,
+    /// Agents in tabs whose name starts with one of these prefixes play no sound.
+    pub muted_tab_prefixes: Vec<String>,
     pub agents: AgentSoundOverrides,
 }
 
@@ -65,6 +67,12 @@ impl SoundConfig {
         }
 
         !matches!(self.agents.for_agent(agent), AgentSoundSetting::Off)
+    }
+
+    pub fn mutes_tab(&self, tab_name: &str) -> bool {
+        self.muted_tab_prefixes
+            .iter()
+            .any(|prefix| tab_name.starts_with(prefix.as_str()))
     }
 
     pub fn path_for(&self, sound: crate::sound::Sound) -> Option<PathBuf> {
@@ -158,6 +166,7 @@ impl Default for SoundConfig {
             path: None,
             done_path: None,
             request_path: None,
+            muted_tab_prefixes: Vec::new(),
             agents: AgentSoundOverrides::default(),
         }
     }
@@ -207,6 +216,7 @@ enabled = true
 path = "sounds/all.mp3"
 done_path = "sounds/done.mp3"
 request_path = "/tmp/request.mp3"
+muted_tab_prefixes = ["[sub"]
 
 [ui.sound.agents]
 droid = "off"
@@ -223,6 +233,9 @@ claude = "on"
             config.ui.sound.request_path,
             Some(PathBuf::from("/tmp/request.mp3"))
         );
+        assert!(config.ui.sound.mutes_tab("[sub] review"));
+        assert!(!config.ui.sound.mutes_tab("main"));
+        assert!(!SoundConfig::default().mutes_tab("[sub] review"));
         assert_eq!(config.ui.sound.agents.droid, AgentSoundSetting::Off);
         assert_eq!(config.ui.sound.agents.claude, AgentSoundSetting::On);
         assert_eq!(config.ui.sound.agents.pi, AgentSoundSetting::Default);
