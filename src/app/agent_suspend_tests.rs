@@ -91,6 +91,7 @@ fn pi_session_report(
         seq: Some(seq),
         session_ref: Some(pi_session()),
         session_start_source: session_start_source.map(str::to_string),
+        started_with_full_permissions: false,
     });
 }
 
@@ -102,6 +103,7 @@ fn claude_session_report(app: &mut AppState, pane_id: PaneId, seq: u64) {
         seq: Some(seq),
         session_ref: Some(claude_session()),
         session_start_source: Some("startup".into()),
+        started_with_full_permissions: false,
     });
 }
 
