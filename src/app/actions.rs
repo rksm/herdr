@@ -493,9 +493,12 @@ impl AppState {
             return false;
         };
 
+        self.unread_hold = self
+            .unread_hold
+            .filter(|pane_id| tab.panes.contains_key(pane_id));
         let mut changed = false;
-        for pane in tab.panes.values_mut() {
-            if !pane.seen {
+        for (pane_id, pane) in &mut tab.panes {
+            if !pane.seen && self.unread_hold != Some(*pane_id) {
                 pane.seen = true;
                 changed = true;
             }
@@ -504,6 +507,35 @@ impl AppState {
             self.mark_session_dirty();
         }
         changed
+    }
+
+    /// Records an idle agent's current output as unseen completed work. The new sequence
+    /// makes clients that already viewed the pane treat it as a fresh completion.
+    pub(crate) fn mark_pane_unread(&mut self, ws_idx: usize, pane_id: PaneId) -> bool {
+        let Some(terminal_id) = self
+            .workspaces
+            .get(ws_idx)
+            .and_then(|workspace| workspace.terminal_id(pane_id))
+            .cloned()
+        else {
+            return false;
+        };
+        let Some(terminal) = self
+            .terminals
+            .get_mut(&terminal_id)
+            .filter(|terminal| terminal.state == AgentState::Idle)
+        else {
+            return false;
+        };
+        self.next_agent_state_change_seq += 1;
+        terminal.last_agent_state_change_seq = Some(self.next_agent_state_change_seq);
+        terminal.last_agent_completion_seq = Some(self.next_agent_state_change_seq);
+        if let Some(pane) = self.workspaces[ws_idx].pane_state_mut(pane_id) {
+            pane.seen = false;
+        }
+        self.unread_hold = Some(pane_id);
+        self.mark_session_dirty();
+        true
     }
 
     pub fn move_workspace(&mut self, source_idx: usize, insert_idx: usize) -> bool {
@@ -1892,6 +1924,9 @@ impl AppState {
             .is_some_and(|terminal| terminal.resumed_agent_waiting_for_input);
         if matches!(change.state, AgentState::Working | AgentState::Blocked) && !restoring {
             pane.seen = true;
+            if self.unread_hold == Some(pane_id) {
+                self.unread_hold = None;
+            }
         } else if !suppress_completion && is_completion_transition(change) {
             pane.seen = suppress_active_tab_notifications;
         }

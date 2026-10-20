@@ -102,7 +102,7 @@ herdr pane read w1:p2 --source recent --lines 50
 | 窗格 | `pane.split`、`pane.swap`、`pane.move`、`pane.zoom`、`pane.layout`、`pane.process_info`、`pane.neighbor`、`pane.edges`、`pane.focus_direction`、`pane.resize`、`pane.list`、`pane.current`、`pane.get`、`pane.rename`、`pane.send_text`、`pane.send_keys`、`pane.send_input`、`pane.read`、`pane.report_agent`、`pane.report_agent_session`、`pane.report_metadata`、`pane.clear_agent_authority`、`pane.release_agent`、`pane.close`、`pane.wait_for_output` |
 | 弹窗 | `popup.close` |
 | 布局 | `layout.export`、`layout.apply`、`layout.set_split_ratio` |
-| 智能体 | `agent.list`、`agent.get`、`agent.read`、`agent.explain`、`agent.send_keys`、`agent.prompt`、`agent.wait`、`agent.rename`、`agent.focus`、`agent.start` |
+| 智能体 | `agent.list`、`agent.get`、`agent.read`、`agent.explain`、`agent.send_keys`、`agent.prompt`、`agent.wait`、`agent.rename`、`agent.focus`、`agent.mark_unread`、`agent.start` |
 | 事件 | `events.subscribe`、`events.wait` |
 | 集成 | `integration.install`、`integration.uninstall` |
 | 插件 | `plugin.link`、`plugin.list`、`plugin.unlink`、`plugin.enable`、`plugin.disable`、`plugin.action.list`、`plugin.action.invoke`、`plugin.log.list`、`plugin.pane.open`、`plugin.pane.focus`、`plugin.pane.close` |
@@ -115,6 +115,12 @@ herdr pane read w1:p2 --source recent --lines 50
 
 ```json
 {"id":"req_mark","method":"tab.mark.set","params":{"tab_id":"w1:t2","marked":true}}
+```
+
+`agent.mark_unread` 将空闲智能体的当前输出记录为尚未查看的已完成工作，并返回状态为 `done` 的更新后 `AgentInfo`。响应包含新的 `state_change_seq` 和与之相同的 `completion_seq`，因此已经查看过该智能体的客户端也会再次将其显示为未读。如果该智能体位于活动标签页中，它会一直保持 `done`，直到离开活动标签页或开始新的工作；在此期间，显示或聚焦该标签页不会将其标记为已读。该请求不会播放声音或显示通知。对于非空闲的智能体，返回 `agent_not_idle`。
+
+```json
+{"id":"req_unread","method":"agent.mark_unread","params":{"target":"w1:p2"}}
 ```
 
 `session.snapshot` 为维护本地运行时缓存的客户端返回一次性引导快照。响应包含版本/协议元数据、当前聚焦的工作区/标签页/窗格 id、工作区记录、标签页记录、窗格记录、标签页布局快照和智能体记录。它不是订阅。初始化或恢复缓存时,应先建立订阅,再按下文事件订阅部分的说明读取服务器当前状态并核对、更新缓存。事件表示缓存可能过期,不能无条件重放到快照上。重新连接后或本地缓存可能已过期时,再次调用 `session.snapshot`。工作区记录也包含关联 worktree 的来源信息。完整的仓库 worktree 发现仍使用 `worktree.list`。

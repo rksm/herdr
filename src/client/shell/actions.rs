@@ -46,6 +46,56 @@ impl ClientShellState {
                 self.persist_chrome_preferences(outcome);
                 outcome.repaint = true;
             }
+            crate::input::KeybindMatch::Action(crate::input::KeybindAction::MarkAgentUnread) => {
+                let Some(snapshot) = self.snapshot.as_deref() else {
+                    return;
+                };
+                let Some(agent) = snapshot
+                    .agents
+                    .iter()
+                    .find(|agent| snapshot.focused_pane_id.as_ref() == Some(&agent.pane_id))
+                else {
+                    outcome.repaint |= self.push_endpoint_notice(
+                        ClientEndpointNoticeKind::Rejected,
+                        "mark_agent_unread",
+                        "No agent focused",
+                        "Focus an idle agent to mark it unread",
+                    );
+                    return;
+                };
+                match agent.agent_status {
+                    crate::api::schema::AgentStatus::Done => {}
+                    crate::api::schema::AgentStatus::Idle => {
+                        let pane_id = agent.pane_id.clone();
+                        let method = crate::api::schema::Method::AgentMarkUnread(
+                            crate::api::schema::AgentTarget {
+                                target: pane_id.clone(),
+                            },
+                        );
+                        if self.push_endpoint_method_with_kind(
+                            method,
+                            PendingEndpointKind::Generic,
+                            outcome,
+                        ) {
+                            if let Some(endpoint) = self
+                                .endpoints
+                                .iter_mut()
+                                .find(|endpoint| endpoint.endpoint_id == self.active_endpoint_id)
+                            {
+                                endpoint.agent_presentation.hold_unread(pane_id);
+                            }
+                        }
+                    }
+                    _ => {
+                        outcome.repaint |= self.push_endpoint_notice(
+                            ClientEndpointNoticeKind::Rejected,
+                            "mark_agent_unread",
+                            "Agent is not idle",
+                            "Only an idle agent can be marked unread",
+                        );
+                    }
+                }
+            }
             crate::input::KeybindMatch::Action(action) => {
                 if self.workspace_preview_action_blocked()
                     && matches!(
