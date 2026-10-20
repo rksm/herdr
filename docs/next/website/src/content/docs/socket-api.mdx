@@ -106,7 +106,7 @@ Raw socket method names use dot notation:
 | Pane | `pane.split`, `pane.swap`, `pane.move`, `pane.zoom`, `pane.layout`, `pane.process_info`, `pane.neighbor`, `pane.edges`, `pane.focus_direction`, `pane.resize`, `pane.list`, `pane.current`, `pane.get`, `pane.rename`, `pane.send_text`, `pane.send_keys`, `pane.send_input`, `pane.read`, `pane.report_agent`, `pane.report_agent_session`, `pane.report_metadata`, `pane.clear_agent_authority`, `pane.release_agent`, `pane.close`, `pane.wait_for_output` |
 | Popup | `popup.close` |
 | Layout | `layout.export`, `layout.apply`, `layout.set_split_ratio` |
-| Agent | `agent.list`, `agent.get`, `agent.read`, `agent.explain`, `agent.send_keys`, `agent.prompt`, `agent.wait`, `agent.rename`, `agent.focus`, `agent.start`, `agent.view.set`, `agent.view.clear` |
+| Agent | `agent.list`, `agent.get`, `agent.read`, `agent.explain`, `agent.send_keys`, `agent.prompt`, `agent.wait`, `agent.rename`, `agent.focus`, `agent.mark_unread`, `agent.start`, `agent.view.set`, `agent.view.clear` |
 | Events | `events.subscribe`, `events.wait` |
 | Integrations | `integration.install`, `integration.uninstall` |
 | Plugins | `plugin.link`, `plugin.list`, `plugin.unlink`, `plugin.enable`, `plugin.disable`, `plugin.action.list`, `plugin.action.invoke`, `plugin.log.list`, `plugin.pane.open`, `plugin.pane.focus`, `plugin.pane.close` |
@@ -119,6 +119,12 @@ Raw socket method names use dot notation:
 
 ```json
 {"id":"req_mark","method":"tab.mark.set","params":{"tab_id":"w1:t2","marked":true}}
+```
+
+`agent.mark_unread` marks an idle agent's current output as unseen completed work and returns its updated `AgentInfo` with status `done`. The response has a new `state_change_seq` and a matching `completion_seq`, so clients that already viewed the agent show it as unread again. If the agent is in the active tab, it stays `done` until it leaves the active tab or starts new work; showing or focusing that tab does not mark it seen in the meantime. It does not play a sound or show a notification. An agent that is not idle returns `agent_not_idle`.
+
+```json
+{"id":"req_unread","method":"agent.mark_unread","params":{"target":"w1:p2"}}
 ```
 
 `session.snapshot` returns a one-time bootstrap snapshot for clients that keep

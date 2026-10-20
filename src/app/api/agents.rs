@@ -61,6 +61,40 @@ impl App {
         encode_success(id, ResponseResult::AgentInfo { agent })
     }
 
+    pub(super) fn handle_agent_mark_unread(&mut self, id: String, target: AgentTarget) -> String {
+        let resolved = match self.resolve_agent_target(&target.target) {
+            Ok(resolved) => resolved,
+            Err(err) => return encode_error_body(id, self.agent_target_error_body(err)),
+        };
+        if !self
+            .state
+            .mark_pane_unread(resolved.ws_idx, resolved.pane_id)
+        {
+            return encode_error(
+                id,
+                "agent_not_idle",
+                format!("agent target {} is not idle", target.target),
+            );
+        }
+        let Some(agent) = self.agent_info(resolved.ws_idx, resolved.pane_id) else {
+            return agent_not_found(id, &target.target);
+        };
+        self.emit_event(crate::api::schema::EventEnvelope {
+            event: crate::api::schema::EventKind::PaneAgentStatusChanged,
+            data: crate::api::schema::EventData::PaneAgentStatusChanged {
+                pane_id: agent.pane_id.clone(),
+                workspace_id: agent.workspace_id.clone(),
+                agent_status: agent.agent_status,
+                agent: agent.agent.clone(),
+                title: agent.title.clone(),
+                display_agent: agent.display_agent.clone(),
+                state_labels: agent.state_labels.clone(),
+            },
+        });
+
+        encode_success(id, ResponseResult::AgentInfo { agent })
+    }
+
     pub(super) fn handle_agent_rename(&mut self, id: String, params: AgentRenameParams) -> String {
         let agent = match self.rename_agent_target(&params.target, params.name) {
             Ok(agent) => agent,
@@ -919,6 +953,69 @@ mod tests {
             panic!("expected agent info response");
         };
         assert_eq!(agent.agent_status, AgentStatus::Idle);
+    }
+
+    #[test]
+    fn agent_mark_unread_stays_unseen_until_the_agent_leaves_the_active_tab() {
+        let mut app = app_with_agent();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        let terminal_id = app.state.workspaces[0].tabs[0].panes[&pane_id]
+            .attached_terminal_id
+            .clone();
+        app.state
+            .terminals
+            .get_mut(&terminal_id)
+            .unwrap()
+            .set_detected_state(Some(Agent::Pi), AgentState::Working);
+        let target = AgentTarget {
+            target: app.public_pane_id(0, pane_id).unwrap(),
+        };
+
+        let rejected = app.handle_agent_mark_unread("working".into(), target.clone());
+        let error: crate::api::schema::ErrorResponse = serde_json::from_str(&rejected).unwrap();
+        assert_eq!(error.error.code, "agent_not_idle");
+
+        app.state
+            .terminals
+            .get_mut(&terminal_id)
+            .unwrap()
+            .set_detected_state(Some(Agent::Pi), AgentState::Idle);
+        app.state.mark_active_tab_seen();
+        app.state.session_dirty = false;
+        let viewed_seq = app.state.next_agent_state_change_seq;
+
+        let response = app.handle_agent_mark_unread("idle".into(), target);
+
+        let success: SuccessResponse = serde_json::from_str(&response).unwrap();
+        let ResponseResult::AgentInfo { agent } = success.result else {
+            panic!("expected agent info response");
+        };
+        assert_eq!(agent.agent_status, AgentStatus::Done);
+        assert!(agent.state_change_seq > viewed_seq);
+        assert_eq!(agent.completion_seq, Some(agent.state_change_seq));
+        assert!(app.state.session_dirty);
+        assert!(app
+            .event_hub
+            .events_after(0)
+            .iter()
+            .any(|(_, event)| matches!(
+                &event.data,
+                crate::api::schema::EventData::PaneAgentStatusChanged {
+                    agent_status: AgentStatus::Done,
+                    ..
+                }
+            )));
+
+        let status = |app: &App| app.agent_info(0, pane_id).unwrap().agent_status;
+        app.state.mark_active_tab_seen();
+        assert_eq!(status(&app), AgentStatus::Done);
+        app.state.workspaces.push(Workspace::test_new("other"));
+        app.state.ensure_test_terminals();
+        app.state.active = Some(1);
+        app.state.mark_active_tab_seen();
+        app.state.active = Some(0);
+        app.state.mark_active_tab_seen();
+        assert_eq!(status(&app), AgentStatus::Idle);
     }
 
     #[test]

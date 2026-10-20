@@ -9,6 +9,9 @@ pub(super) struct EndpointAgentPresentation {
     acknowledged: HashMap<String, u64>,
     completed: HashMap<String, u64>,
     working: HashSet<String>,
+    /// Panes this client marked unread while showing them. Showing a held pane does not
+    /// count as viewing it until it leaves the surface or its agent starts new work.
+    unread_holds: HashSet<String>,
     pending_completions: Option<(
         Option<u64>,
         crate::protocol::endpoint::EndpointAgentCompletions,
@@ -40,6 +43,14 @@ impl EndpointAgentPresentation {
         self.project_snapshot_for_generation(snapshot, None);
     }
 
+    pub(super) fn hold_unread(&mut self, pane_id: String) {
+        self.unread_holds.insert(pane_id);
+    }
+
+    pub(super) fn release_unread_holds(&mut self) {
+        self.unread_holds.clear();
+    }
+
     pub(super) fn project_snapshot_for_generation(
         &mut self,
         snapshot: &mut ClientShellSnapshot,
@@ -50,6 +61,7 @@ impl EndpointAgentPresentation {
             self.acknowledged.clear();
             self.completed.clear();
             self.working.clear();
+            self.unread_holds.clear();
             self.acknowledged.extend(
                 snapshot
                     .agents
@@ -69,6 +81,8 @@ impl EndpointAgentPresentation {
             .retain(|pane_id, _| pane_ids.contains(pane_id.as_str()));
         self.working
             .retain(|pane_id| pane_ids.contains(pane_id.as_str()));
+        self.unread_holds
+            .retain(|pane_id| pane_ids.contains(pane_id.as_str()));
         let completions = self
             .pending_completions
             .take()
@@ -83,9 +97,11 @@ impl EndpointAgentPresentation {
                 AgentStatus::Working => {
                     self.working.insert(agent.pane_id.clone());
                     self.completed.remove(&agent.pane_id);
+                    self.unread_holds.remove(&agent.pane_id);
                 }
                 AgentStatus::Blocked => {
                     self.completed.remove(&agent.pane_id);
+                    self.unread_holds.remove(&agent.pane_id);
                 }
                 AgentStatus::Idle | AgentStatus::Done => {
                     let observed_work = self.working.remove(&agent.pane_id);
@@ -113,6 +129,7 @@ impl EndpointAgentPresentation {
                 _ => {
                     self.working.remove(&agent.pane_id);
                     self.completed.remove(&agent.pane_id);
+                    self.unread_holds.remove(&agent.pane_id);
                 }
             }
             agent.agent_status = self.projected_status(agent);
@@ -126,11 +143,16 @@ impl EndpointAgentPresentation {
         surface: &PaneSurfaceFrame,
         outer_focused: Option<bool>,
     ) -> bool {
-        if outer_focused == Some(false)
-            || self.boot_id.as_deref() != Some(surface.boot_id.as_str())
+        if self.boot_id.as_deref() != Some(surface.boot_id.as_str())
             || snapshot.boot_id != surface.boot_id
             || snapshot.revision != surface.projection_revision
         {
+            return false;
+        }
+        // A coherent surface shows what is on screen even while the outer terminal is unfocused.
+        self.unread_holds
+            .retain(|pane_id| surface.panes.iter().any(|pane| &pane.pane_id == pane_id));
+        if outer_focused == Some(false) {
             return false;
         }
 
@@ -143,6 +165,9 @@ impl EndpointAgentPresentation {
             else {
                 continue;
             };
+            if self.unread_holds.contains(&agent.pane_id) {
+                continue;
+            }
             if self
                 .acknowledged
                 .get(&agent.pane_id)
@@ -519,6 +544,37 @@ mod tests {
             completed_for_background.agents[0].agent_status,
             AgentStatus::Done
         );
+    }
+
+    #[test]
+    fn unread_hold_lasts_until_the_pane_leaves_the_surface_or_works() {
+        let mut presentation = EndpointAgentPresentation::default();
+        let mut viewed = snapshot(AgentStatus::Idle, 4, 1);
+        presentation.project_snapshot(&mut viewed);
+        presentation.hold_unread("agent-pane".into());
+        let mut unread = snapshot(AgentStatus::Done, 5, 2);
+        presentation.project_snapshot(&mut unread);
+
+        assert!(!presentation.acknowledge_surface(&mut unread, &surface(2), Some(true)));
+        assert_eq!(unread.agents[0].agent_status, AgentStatus::Done);
+
+        let mut stale = surface(1);
+        stale.panes.clear();
+        assert!(!presentation.acknowledge_surface(&mut unread, &stale, Some(true)));
+        assert!(!presentation.acknowledge_surface(&mut unread, &surface(2), Some(true)));
+        let mut away = surface(2);
+        away.panes.clear();
+        assert!(!presentation.acknowledge_surface(&mut unread, &away, Some(false)));
+        assert!(presentation.acknowledge_surface(&mut unread, &surface(2), Some(true)));
+        assert_eq!(unread.agents[0].agent_status, AgentStatus::Idle);
+
+        presentation.hold_unread("agent-pane".into());
+        let mut working = snapshot(AgentStatus::Working, 6, 3);
+        presentation.project_snapshot(&mut working);
+        let mut completed = snapshot(AgentStatus::Idle, 7, 4);
+        presentation.project_snapshot(&mut completed);
+        assert!(presentation.acknowledge_surface(&mut completed, &surface(4), Some(true)));
+        assert_eq!(completed.agents[0].agent_status, AgentStatus::Idle);
     }
 
     #[test]

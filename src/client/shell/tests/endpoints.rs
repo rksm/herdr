@@ -2011,6 +2011,54 @@ fn unselected_endpoint_completion_projects_done_client_side() {
 }
 
 #[test]
+fn mark_agent_unread_keeps_the_viewed_agent_unread_until_it_leaves_the_screen() {
+    use crate::api::schema::AgentStatus;
+
+    let (mut state, remote_id) = state_with_remote();
+    let mut viewed = snapshot();
+    viewed.agents = vec![agent("worker", AgentStatus::Idle, 4)];
+    state.set_snapshot(Box::new(viewed.clone()));
+    state.set_pane_surface(surface());
+
+    let mut outcome = ClientShellInput::default();
+    state.record_binding(
+        crate::input::KeybindMatch::Action(crate::input::KeybindAction::MarkAgentUnread),
+        &mut outcome,
+    );
+    let [ClientShellAction::Endpoint { request, .. }] = &outcome.actions[..] else {
+        panic!("mark agent unread should use the endpoint API");
+    };
+    assert!(matches!(
+        &request.method,
+        crate::api::schema::Method::AgentMarkUnread(target) if target.target == "pane_1"
+    ));
+
+    let mut unread = viewed;
+    unread.revision = 2;
+    unread.agents = vec![agent("worker", AgentStatus::Done, 5)];
+    state.set_snapshot(Box::new(unread));
+    let mut shown = surface();
+    shown.projection_revision = 2;
+    state.set_pane_surface(shown);
+
+    let status = |state: &ClientShellState| {
+        state
+            .snapshot
+            .as_deref()
+            .map(|snapshot| snapshot.agents[0].agent_status)
+    };
+    assert_eq!(status(&state), Some(AgentStatus::Done));
+
+    assert!(state.activate_endpoint_projection(&remote_id));
+    assert!(state.activate_endpoint_projection(&ClientEndpointId::Local));
+    let mut back = surface();
+    back.projection_revision = 2;
+    back.surface_revision = 2;
+    state.set_pane_surface(back);
+    assert_eq!(status(&state), Some(AgentStatus::Idle));
+}
+
+#[test]
 fn clicking_remote_machine_name_requests_activation_without_mutating_projection() {
     let (mut state, endpoint_id) = state_with_remote();
     state.compose(100, 28).expect("combined endpoint frame");
