@@ -3004,6 +3004,12 @@
             "pane_id": {
               "type": "string"
             },
+            "permission_mode": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "resume_argv": {
               "description": "Command that resumes this agent's session after a Herdr restart. The\nfirst element must be a plain command name.",
               "items": {
@@ -3011,12 +3017,6 @@
               },
               "type": [
                 "array",
-                "null"
-              ]
-            },
-            "permission_mode": {
-              "type": [
-                "string",
                 "null"
               ]
             },
@@ -6396,6 +6396,22 @@
             },
             "params": {
               "$ref": "#/schemas/request/$defs/PluginPaneCloseParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "agent.mark_unread",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/AgentTarget"
             }
           },
           "required": [

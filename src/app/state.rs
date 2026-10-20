@@ -829,6 +829,9 @@ pub struct AppState {
     pub sidebar_agents: crate::config::AgentsSidebarConfig,
     pub sidebar_spaces: crate::config::SpacesSidebarConfig,
     pub next_agent_state_change_seq: u64,
+    /// Pane marked unread while it was shown. Showing the active tab does not mark it seen
+    /// until it leaves the active tab or its agent starts new work.
+    pub(crate) unread_hold: Option<PaneId>,
     pub confirm_close: bool,
     pub pane_borders: crate::config::PaneBordersConfig,
     pub pane_outer_borders: bool,
@@ -1071,6 +1074,7 @@ impl AppState {
             sidebar_agents: crate::config::AgentsSidebarConfig::default(),
             sidebar_spaces: crate::config::SpacesSidebarConfig::default(),
             next_agent_state_change_seq: 0,
+            unread_hold: None,
             confirm_close: true,
             pane_borders: crate::config::PaneBordersConfig::Auto,
             pane_outer_borders: true,

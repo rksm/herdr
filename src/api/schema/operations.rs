@@ -206,6 +206,7 @@ mod tests {
             "plugin.pane.open",
             "plugin.pane.focus",
             "plugin.pane.close",
+            "agent.mark_unread",
         ]
         .into_iter()
         .collect::<BTreeSet<_>>();
