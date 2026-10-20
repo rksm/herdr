@@ -626,6 +626,12 @@
           "description": "Focus the next agent shown in the agent panel. Unset by default."
         },
         {
+          "key": "keys.mark_agent_unread",
+          "type": "keybinding",
+          "default": "\"prefix+u\"",
+          "description": "Mark the focused idle agent unread until you view it again."
+        },
+        {
           "key": "keys.focus_agent",
           "type": "keybinding",
           "default": "unset",
