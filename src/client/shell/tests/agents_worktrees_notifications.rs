@@ -1734,3 +1734,98 @@ fn semantic_notifications_use_client_policy_and_stable_navigation_targets() {
     assert!(state.visible_notification.is_none());
     assert_eq!(state.pending_notifications.len(), 1);
 }
+
+fn grouped_agents_snapshot() -> ClientShellSnapshot {
+    let mut grouped = snapshot();
+    let mut second = grouped.workspaces[0].clone();
+    second.workspace_id = "ws_2".into();
+    second.label = "phyron".into();
+    second.focused = false;
+    grouped.workspaces.push(second);
+    for (pane_id, workspace_id, status) in [
+        ("pane_1", "ws_1", AgentStatus::Working),
+        ("pane_2", "ws_2", AgentStatus::Blocked),
+        ("pane_3", "ws_2", AgentStatus::Idle),
+    ] {
+        grouped.agents.push(ClientShellAgent {
+            pane_id: pane_id.into(),
+            workspace_id: workspace_id.into(),
+            tab_id: "tab_1".into(),
+            name: Some("claude".into()),
+            display_agent: None,
+            agent: Some("claude".into()),
+            title: None,
+            terminal_title: None,
+            terminal_title_stripped: None,
+            agent_status: status,
+            state_change_seq: 1,
+            state_labels: Vec::new(),
+            tokens: Vec::new(),
+            focused: pane_id == "pane_1",
+        });
+    }
+    grouped
+}
+
+#[test]
+fn agent_panel_groups_agents_under_folding_workspace_headers() {
+    use super::super::agent_sidebar::{agent_panel_entries, AgentPanelEntry};
+    let grouped = grouped_agents_snapshot();
+    let config = ClientShellConfig::from_config(&Config::default());
+    let shape = |collapsed: &HashSet<String>| {
+        agent_panel_entries(&grouped, &config, collapsed)
+            .into_iter()
+            .map(|entry| match entry {
+                AgentPanelEntry::Group(header) => format!(
+                    "{}:{}:{}:{}",
+                    header.label, header.collapsed, header.agents, header.waiting
+                ),
+                AgentPanelEntry::Agent(row) => row.pane_id,
+            })
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(
+        shape(&HashSet::new()),
+        [
+            "client-shell:false:1:0",
+            "pane_1",
+            "phyron:false:2:1",
+            "pane_2",
+            "pane_3"
+        ]
+    );
+    assert_eq!(
+        shape(&HashSet::from(["ws_2".to_string()])),
+        ["client-shell:false:1:0", "pane_1", "phyron:true:2:1"]
+    );
+}
+
+#[test]
+fn folded_workspace_is_a_single_agent_navigation_stop() {
+    use super::super::agent_sidebar::agent_navigation_stops;
+    let grouped = grouped_agents_snapshot();
+    let sort = crate::config::AgentPanelSortConfig::Spaces;
+    let stops = |collapsed: &HashSet<String>| {
+        agent_navigation_stops(&grouped, sort, collapsed)
+            .into_iter()
+            .map(|(pane_id, _)| pane_id)
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(stops(&HashSet::new()), ["pane_1", "pane_2", "pane_3"]);
+    assert_eq!(
+        stops(&HashSet::from(["ws_2".to_string()])),
+        ["pane_1", "pane_2"]
+    );
+    // Priority order never folds.
+    assert_eq!(
+        agent_navigation_stops(
+            &grouped,
+            crate::config::AgentPanelSortConfig::Priority,
+            &HashSet::from(["ws_2".to_string()]),
+        )
+        .len(),
+        3
+    );
+}

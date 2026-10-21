@@ -197,6 +197,10 @@ pub(crate) fn keybind_help_groups(
                     binding_label(&keybinds.toggle_agent_sort),
                     "toggle agent order",
                 ),
+                entry(
+                    binding_label(&keybinds.toggle_agent_group),
+                    "fold workspace agents",
+                ),
                 entry(binding_label(&keybinds.focus_pane_left), "focus pane left"),
                 entry(binding_label(&keybinds.focus_pane_down), "focus pane down"),
                 entry(binding_label(&keybinds.focus_pane_up), "focus pane up"),

@@ -178,7 +178,11 @@ pub(crate) fn space_rows(
 }
 
 pub(crate) fn separator(previous: &ResolvedToken, current: &ResolvedToken) -> &'static str {
-    if matches!(previous.kind, ResolvedTokenKind::StateIcon)
+    // A one-cell custom value is an icon (agent logo); it joins like state_icon.
+    let icon = matches!(&previous.kind, ResolvedTokenKind::Custom(value)
+        if unicode_width::UnicodeWidthStr::width(value.as_str()) == 1);
+    if icon
+        || matches!(previous.kind, ResolvedTokenKind::StateIcon)
         || matches!(current.kind, ResolvedTokenKind::GitStatus { .. })
     {
         " "
@@ -397,6 +401,14 @@ rows = [[{ token = "$load", rules = [{ lt = 50, hide = true }] }], ["workspace"]
             let rows = agent_rows(&config, context(&entry), "working");
             assert_eq!(rows[0][0].kind, ResolvedTokenKind::Agent("pi".into()));
         }
+    }
+
+    #[test]
+    fn one_cell_custom_icon_joins_with_a_space() {
+        let icon = ResolvedToken::unstyled(ResolvedTokenKind::Custom("✻".into()));
+        let word = ResolvedToken::unstyled(ResolvedTokenKind::Custom("claude".into()));
+        assert_eq!(separator(&icon, &word), " ");
+        assert_eq!(separator(&word, &icon), " · ");
     }
 
     #[test]
