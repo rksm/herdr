@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ratatui::{
     buffer::Buffer,
@@ -56,6 +56,7 @@ pub(super) fn render_agent_panel(
     area: Rect,
     snapshot: &ClientShellSnapshot,
     config: &ClientShellConfig,
+    collapsed: &HashSet<String>,
     agent_scroll: &mut usize,
     hits: &mut ShellHitMap,
 ) {
@@ -69,11 +70,14 @@ pub(super) fn render_agent_panel(
         return;
     }
 
-    let rows = agent_rows(snapshot, config, None);
+    let entries = agent_panel_entries(snapshot, config, collapsed);
+    let grouped = entries
+        .iter()
+        .any(|entry| matches!(entry, AgentPanelEntry::Group(_)));
     render_agent_list(
         buffer,
         area,
-        &rows,
+        &entries,
         snapshot
             .agent_view_label
             .as_ref()
@@ -81,13 +85,171 @@ pub(super) fn render_agent_panel(
         config,
         agent_scroll,
         hits,
-        |row| row.rows.len(),
-        |buffer, rect, row, next, hits| {
-            hits.agents.push((rect, row.pane_id.clone()));
-            let workspace_end = next.is_some_and(|next| row.workspace_id != next.workspace_id);
-            render_agent_row(buffer, rect, row, workspace_end, config);
+        |entry| match entry {
+            AgentPanelEntry::Group(header) => 1 + usize::from(!header.first),
+            AgentPanelEntry::Agent(row) => row.rows.len(),
+        },
+        |buffer, rect, entry, next, hits| match entry {
+            AgentPanelEntry::Group(header) => {
+                // Groups after the first carry one blank spacer line above the header.
+                let line = Rect::new(rect.x, rect.bottom().saturating_sub(1), rect.width, 1);
+                hits.agent_groups.push((line, header.workspace_id.clone()));
+                render_agent_group(buffer, line, header, config);
+            }
+            AgentPanelEntry::Agent(row) => {
+                hits.agents.push((rect, row.pane_id.clone()));
+                // A group header already marks the boundary, so only flat lists draw dividers.
+                let workspace_end = matches!(
+                    next,
+                    Some(AgentPanelEntry::Agent(next)) if next.workspace_id != row.workspace_id
+                );
+                let indent = if grouped { 2 } else { 0 };
+                render_agent_row(buffer, rect, row, workspace_end, config, indent);
+            }
         },
     );
+}
+
+/// Workspace header in the grouped agent panel. Folded headers summarize their agents.
+pub(super) struct AgentGroupHeader {
+    pub(super) workspace_id: String,
+    pub(super) label: String,
+    pub(super) collapsed: bool,
+    pub(super) agents: usize,
+    pub(super) waiting: usize,
+    pub(super) focused: bool,
+    pub(super) first: bool,
+}
+
+pub(super) enum AgentPanelEntry<'a> {
+    Group(AgentGroupHeader),
+    Agent(AgentRow<'a>),
+}
+
+/// Groups agents under workspace headers in the unfiltered "spaces" order; folded
+/// workspaces keep only their header. Other orders stay a flat list.
+pub(super) fn agent_panel_entries<'a>(
+    snapshot: &'a ClientShellSnapshot,
+    config: &ClientShellConfig,
+    collapsed: &HashSet<String>,
+) -> Vec<AgentPanelEntry<'a>> {
+    let rows = agent_rows(snapshot, config, None);
+    if config.agent_panel_sort != crate::config::AgentPanelSortConfig::Spaces
+        || snapshot.agent_view_label.is_some()
+    {
+        return rows.into_iter().map(AgentPanelEntry::Agent).collect();
+    }
+    let mut entries = Vec::new();
+    let mut rows = rows.into_iter().peekable();
+    while let Some(first) = rows.next() {
+        let workspace_id = first.workspace_id;
+        let mut group = vec![first];
+        while let Some(row) = rows.next_if(|row| row.workspace_id == workspace_id) {
+            group.push(row);
+        }
+        let folded = collapsed.contains(workspace_id);
+        let label = snapshot
+            .workspaces
+            .iter()
+            .find(|workspace| workspace.workspace_id == workspace_id)
+            .map(|workspace| workspace.label.clone())
+            .unwrap_or_default();
+        entries.push(AgentPanelEntry::Group(AgentGroupHeader {
+            label,
+            collapsed: folded,
+            agents: group.len(),
+            waiting: group
+                .iter()
+                .filter(|row| row.status == crate::api::schema::AgentStatus::Blocked)
+                .count(),
+            focused: folded && group.iter().any(|row| row.focused),
+            first: entries.is_empty(),
+            workspace_id: workspace_id.to_string(),
+        }));
+        if !folded {
+            entries.extend(group.into_iter().map(AgentPanelEntry::Agent));
+        }
+    }
+    entries
+}
+
+/// Navigation stops in panel order: every visible agent, and one stop per folded
+/// workspace (its first agent, so focusing it switches to that workspace).
+pub(super) fn agent_navigation_stops(
+    snapshot: &ClientShellSnapshot,
+    sort: crate::config::AgentPanelSortConfig,
+    collapsed: &HashSet<String>,
+) -> Vec<(String, String)> {
+    let mut stops: Vec<(String, String)> = Vec::new();
+    for pane_id in ordered_agent_pane_ids(snapshot, sort) {
+        let Some(agent) = snapshot
+            .agents
+            .iter()
+            .find(|agent| agent.pane_id == pane_id)
+        else {
+            continue;
+        };
+        let folds = sort == crate::config::AgentPanelSortConfig::Spaces
+            && snapshot.agent_view_label.is_none()
+            && collapsed.contains(&agent.workspace_id);
+        if folds
+            && stops
+                .iter()
+                .any(|(_, workspace)| workspace == &agent.workspace_id)
+        {
+            continue;
+        }
+        stops.push((pane_id, agent.workspace_id.clone()));
+    }
+    stops
+}
+
+fn render_agent_group(
+    buffer: &mut Buffer,
+    rect: Rect,
+    header: &AgentGroupHeader,
+    config: &ClientShellConfig,
+) {
+    let palette = &config.palette;
+    let mut spans = vec![
+        ratatui::text::Span::styled(
+            if header.collapsed { " ▸ " } else { " ▾ " },
+            Style::default().fg(palette.overlay0),
+        ),
+        ratatui::text::Span::styled(
+            header.label.clone(),
+            Style::default()
+                .fg(palette.accent)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ];
+    if header.collapsed {
+        let noun = if header.agents == 1 {
+            "agent"
+        } else {
+            "agents"
+        };
+        spans.push(ratatui::text::Span::styled(
+            format!(" · {} {noun}", header.agents),
+            Style::default().fg(palette.overlay0),
+        ));
+        if header.waiting > 0 {
+            spans.push(ratatui::text::Span::styled(
+                format!(" · {} waiting", header.waiting),
+                Style::default()
+                    .fg(palette.red)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
+    }
+    let style = if header.focused {
+        Style::default().bg(palette.active_row_bg)
+    } else {
+        Style::default()
+    };
+    Paragraph::new(Line::from(spans))
+        .style(style)
+        .render(rect, buffer);
 }
 
 pub(super) fn render_agent_panel_header(
@@ -329,6 +491,7 @@ pub(super) fn render_agent_row(
     row: &AgentRow<'_>,
     workspace_end: bool,
     config: &ClientShellConfig,
+    group_indent: usize,
 ) {
     let palette = &config.palette;
     let row_style = if row.focused {
@@ -360,7 +523,7 @@ pub(super) fn render_agent_row(
         row.rows.clone()
     };
     for (index, tokens) in rows.iter().take(rect.height as usize).enumerate() {
-        let indent = if index == 0 { 1 } else { 3 };
+        let indent = group_indent + if index == 0 { 1 } else { 3 };
         let mut spans = vec![ratatui::text::Span::raw(" ".repeat(indent))];
         let mark_width = if row.marked && index == 0 {
             spans.push(ratatui::text::Span::styled(

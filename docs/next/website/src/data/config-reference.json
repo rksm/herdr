@@ -860,6 +860,12 @@
           "description": "Toggle the agent panel between grouped and priority order. Herdr saves this preference for the client. Clear any custom agent view before changing the order."
         },
         {
+          "key": "keys.toggle_agent_group",
+          "type": "keybinding",
+          "default": "\"prefix+f\"",
+          "description": "Fold or unfold the focused workspace's agents in the grouped agent panel. Clicking a workspace header does the same. Herdr saves the folds for the client."
+        },
+        {
           "key": "keys.indexed.tabs",
           "type": "string",
           "default": "unset",

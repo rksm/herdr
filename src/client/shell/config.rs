@@ -32,6 +32,12 @@ impl ClientShellState {
         };
         let mut collapsed_groups = self.collapsed_groups.iter().cloned().collect::<Vec<_>>();
         collapsed_groups.sort();
+        let mut collapsed_agent_workspaces = self
+            .collapsed_agent_workspaces
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>();
+        collapsed_agent_workspaces.sort();
         let mut remote_collapsed_groups = self
             .remote_collapsed_groups
             .iter()
@@ -61,6 +67,7 @@ impl ClientShellState {
                 .then_some(self.config.agent_panel_sort),
             collapsed_groups,
             remote_collapsed_groups,
+            collapsed_agent_workspaces,
         };
         if let Err(error) = preferences::store(path, preferences) {
             self.set_endpoint_error(error);

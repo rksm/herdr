@@ -76,7 +76,14 @@ pub(super) fn render_expanded(
                 row.endpoint_id != next.endpoint_id
                     || row.agent.workspace_id != next.agent.workspace_id
             });
-            super::agent_sidebar::render_agent_row(buffer, rect, &row.agent, workspace_end, config);
+            super::agent_sidebar::render_agent_row(
+                buffer,
+                rect,
+                &row.agent,
+                workspace_end,
+                config,
+                0,
+            );
             if row.stale {
                 buffer.set_style(
                     rect,

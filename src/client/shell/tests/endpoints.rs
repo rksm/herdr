@@ -1457,7 +1457,7 @@ fn grouped_agent_dividers_keep_row_heights_and_respect_workspace_and_machine_bou
         .collect();
 
     let config = ClientShellConfig::from_config(&Config::default());
-    let area = Rect::new(0, 0, 30, 12);
+    let area = Rect::new(0, 0, 30, 16);
     let mut buffer = Buffer::empty(area);
     let mut hits = ShellHitMap::default();
     let mut scroll = 0;
@@ -1466,18 +1466,20 @@ fn grouped_agent_dividers_keep_row_heights_and_respect_workspace_and_machine_bou
         area,
         &local,
         &config,
+        &std::collections::HashSet::new(),
         &mut scroll,
         &mut hits,
     );
+    // Workspace headers mark the boundaries in the local grouped panel, so no row draws a divider.
+    assert_eq!(hits.agent_groups.len(), 2);
     assert_eq!(hits.agents.len(), 3);
-    for (index, (rect, _)) in hits.agents.iter().enumerate() {
+    for (rect, _) in &hits.agents {
         assert_eq!(rect.height, 2);
-        assert_eq!(rect.y, 3 + index as u16 * 2);
-        assert_eq!(
-            buffer[(rect.right() - 1, rect.bottom() - 1)].symbol() == "─",
-            index == 1
-        );
+        assert_ne!(buffer[(rect.right() - 1, rect.bottom() - 1)].symbol(), "─");
     }
+    let second_header = hits.agent_groups[1].0;
+    assert!(hits.agents[1].0.bottom() <= second_header.y);
+    assert!(second_header.y < hits.agents[2].0.y);
 
     let mut state = ClientShellState::new(config);
     let profile = remote_profile();

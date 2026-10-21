@@ -96,6 +96,17 @@ impl ClientShellState {
                     }
                 }
             }
+            crate::input::KeybindMatch::Action(crate::input::KeybindAction::ToggleAgentGroup) => {
+                let workspace_id = self
+                    .snapshot
+                    .as_deref()
+                    .and_then(|snapshot| snapshot.focused_workspace_id.clone());
+                if let Some(workspace_id) = workspace_id {
+                    self.toggle_collapsed_agent_workspace(workspace_id);
+                    outcome.repaint = true;
+                    self.persist_chrome_preferences(outcome);
+                }
+            }
             crate::input::KeybindMatch::Action(action) => {
                 if self.workspace_preview_action_blocked()
                     && matches!(
@@ -967,24 +978,36 @@ impl ClientShellState {
 
         match action {
             KeybindAction::FocusAgent(index) => {
-                let agents = super::agent_sidebar::ordered_agent_pane_ids(
+                let agents = super::agent_sidebar::agent_navigation_stops(
                     snapshot,
                     self.config.agent_panel_sort,
+                    &self.collapsed_agent_workspaces,
                 );
                 Some(Method::PaneFocus(PaneTarget {
-                    pane_id: agents.get(index)?.clone(),
+                    pane_id: agents.get(index)?.0.clone(),
                 }))
             }
             KeybindAction::PreviousAgent | KeybindAction::NextAgent => {
-                let agents = super::agent_sidebar::ordered_agent_pane_ids(
+                let agents = super::agent_sidebar::agent_navigation_stops(
                     snapshot,
                     self.config.agent_panel_sort,
+                    &self.collapsed_agent_workspaces,
                 );
                 if agents.is_empty() {
                     return None;
                 }
-                let current = agents.iter().position(|pane_id| {
+                let focused_workspace = snapshot.focused_pane_id.as_deref().and_then(|focused| {
+                    snapshot
+                        .agents
+                        .iter()
+                        .find(|agent| agent.pane_id == focused)
+                        .map(|agent| agent.workspace_id.as_str())
+                });
+                // A focused agent hidden in a folded workspace counts as that workspace's stop.
+                let current = agents.iter().position(|(pane_id, workspace_id)| {
                     Some(pane_id.as_str()) == snapshot.focused_pane_id.as_deref()
+                        || (self.collapsed_agent_workspaces.contains(workspace_id)
+                            && Some(workspace_id.as_str()) == focused_workspace)
                 });
                 let next = match (current, action) {
                     (Some(current), KeybindAction::PreviousAgent) => {
@@ -995,7 +1018,7 @@ impl ClientShellState {
                     (None, KeybindAction::NextAgent) => 0,
                     _ => unreachable!("relative agent action"),
                 };
-                let pane_id = agents[next].clone();
+                let pane_id = agents[next].0.clone();
                 if !self
                     .hits
                     .agents

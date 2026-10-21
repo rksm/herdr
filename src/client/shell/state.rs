@@ -94,6 +94,7 @@ pub(super) struct ShellHitMap {
     pub(super) popup: Option<PaneHit>,
     pub(super) pane_splits: Vec<PaneSplitHit>,
     pub(super) agents: Vec<(Rect, String)>,
+    pub(super) agent_groups: Vec<(Rect, String)>,
     pub(super) endpoint_agents: Vec<(Rect, ClientEndpointId, String)>,
     pub(super) agent_body: Rect,
     pub(super) agent_scrollbar: Rect,
@@ -889,6 +890,7 @@ pub(crate) struct ClientShellState {
     pub(super) tab_press: Option<ClientTabPress>,
     pub(super) collapsed_groups: HashSet<String>,
     pub(super) remote_collapsed_groups: HashMap<ClientEndpointId, HashSet<String>>,
+    pub(super) collapsed_agent_workspaces: HashSet<String>,
     pub(super) workspace_scroll: usize,
     pub(super) agent_scroll: usize,
     pub(super) pending_agent_reveal: Option<(ClientEndpointId, String)>,
@@ -1063,6 +1065,10 @@ impl ClientShellState {
             tab_press: None,
             collapsed_groups: preferences.collapsed_groups.into_iter().collect(),
             remote_collapsed_groups,
+            collapsed_agent_workspaces: preferences
+                .collapsed_agent_workspaces
+                .into_iter()
+                .collect(),
             workspace_scroll: 0,
             agent_scroll: 0,
             pending_agent_reveal: None,
@@ -1175,6 +1181,12 @@ impl ClientShellState {
     pub(super) fn group_is_collapsed(&self, endpoint_id: &ClientEndpointId, key: &str) -> bool {
         self.collapsed_groups_for_endpoint(endpoint_id)
             .is_some_and(|groups| groups.contains(key))
+    }
+
+    pub(super) fn toggle_collapsed_agent_workspace(&mut self, workspace_id: String) {
+        if !self.collapsed_agent_workspaces.remove(&workspace_id) {
+            self.collapsed_agent_workspaces.insert(workspace_id);
+        }
     }
 
     pub(super) fn toggle_collapsed_group(&mut self, endpoint_id: &ClientEndpointId, key: String) {
