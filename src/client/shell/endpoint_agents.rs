@@ -72,7 +72,7 @@ pub(super) fn render_expanded(
         hits,
         |row| row.agent.rows.len(),
         |buffer, rect, row, hits| {
-            super::agent_sidebar::render_agent_row(buffer, rect, &row.agent, config);
+            super::agent_sidebar::render_agent_row(buffer, rect, &row.agent, config, 0);
             if row.stale {
                 buffer.set_style(
                     rect,
@@ -122,18 +122,18 @@ impl ClientShellState {
     }
 }
 
-struct EndpointAgentRow {
+struct EndpointAgentRow<'a> {
     endpoint_id: ClientEndpointId,
     machine_label: String,
     stale: bool,
-    agent: super::agent_sidebar::AgentRow,
+    agent: super::agent_sidebar::AgentRow<'a>,
 }
 
-fn agent_rows(
-    endpoints: &[ClientShellEndpoint],
+fn agent_rows<'a>(
+    endpoints: &'a [ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     config: &ClientShellConfig,
-) -> Vec<EndpointAgentRow> {
+) -> Vec<EndpointAgentRow<'a>> {
     let mut rendered_rows = endpoints
         .iter()
         .filter_map(|endpoint| {
