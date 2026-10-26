@@ -65,8 +65,23 @@ impl App {
             Ok(env) => env,
             Err((code, message)) => return encode_error(id, &code, message),
         };
+        // Fork: by default, insert the new workspace right after the one it was
+        // created from. Resolved here because creating with focus changes the
+        // active workspace, and the source still counts when an explicit cwd is given.
+        let insert_after = match self.state.new_workspace_position {
+            crate::config::NewWorkspacePositionConfig::AfterCurrent => params
+                .source_workspace_id
+                .as_deref()
+                .and_then(|workspace_id| self.parse_workspace_id(workspace_id))
+                .or_else(|| self.workspace_creation_source()),
+            crate::config::NewWorkspacePositionConfig::End => None,
+        };
         match self.create_workspace_with_launch_env(cwd, params.focus, extra_env) {
             Ok(index) => {
+                let index = match insert_after {
+                    Some(source) if self.state.move_workspace(index, source + 1) => source + 1,
+                    _ => index,
+                };
                 if let Some(label) = params.label {
                     if let Some(workspace) = self.state.workspaces.get_mut(index) {
                         workspace.set_custom_name(label);
@@ -555,6 +570,68 @@ mod tests {
         );
         shutdown_test_runtimes(&mut app);
         let _ = std::fs::remove_dir_all(&source_cwd);
+    }
+
+    #[tokio::test]
+    async fn workspace_create_places_the_workspace_by_configured_position() {
+        use super::super::test_support::{exiting_test_command, shutdown_test_runtimes};
+        use crate::config::{NewWorkspacePositionConfig, ShellModeConfig};
+
+        for position in [
+            NewWorkspacePositionConfig::AfterCurrent,
+            NewWorkspacePositionConfig::End,
+        ] {
+            let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
+            let mut app = App::new(
+                &Config::default(),
+                crate::app::AppPolicy::TEST,
+                None,
+                api_rx,
+                crate::api::EventHub::default(),
+            );
+            app.state.default_shell = exiting_test_command().into();
+            app.state.shell_mode = ShellModeConfig::NonLogin;
+            app.state.new_workspace_position = position;
+            app.state.workspaces =
+                vec![Workspace::test_new("first"), Workspace::test_new("second")];
+            app.state.active = Some(1);
+            app.state.selected = 1;
+            app.state.ensure_test_terminals();
+            let first_id = app.public_workspace_id(0);
+            let second_id = app.public_workspace_id(1);
+
+            // The name prompt sends both a source workspace and an explicit cwd.
+            let response = app.handle_workspace_create(
+                "req".into(),
+                WorkspaceCreateParams {
+                    source_workspace_id: Some(first_id.clone()),
+                    cwd: Some(std::env::temp_dir().display().to_string()),
+                    focus: true,
+                    label: None,
+                    env: Default::default(),
+                },
+            );
+
+            let success: SuccessResponse = serde_json::from_str(&response).unwrap();
+            let ResponseResult::WorkspaceCreated { workspace, .. } = success.result else {
+                panic!("expected workspace_created, got {:?}", success.result);
+            };
+            let ids = app
+                .state
+                .workspaces
+                .iter()
+                .map(|workspace| workspace.id.clone())
+                .collect::<Vec<_>>();
+            let new_id = workspace.workspace_id;
+            let (expected, index) = match position {
+                NewWorkspacePositionConfig::AfterCurrent => ([first_id, new_id, second_id], 1),
+                NewWorkspacePositionConfig::End => ([first_id, second_id, new_id], 2),
+            };
+            assert_eq!(ids, expected, "{position:?}");
+            assert_eq!(workspace.number, index + 1, "{position:?}");
+            assert_eq!(app.state.active, Some(index), "{position:?}");
+            shutdown_test_runtimes(&mut app);
+        }
     }
 
     fn app_with_linked_worktree() -> App {

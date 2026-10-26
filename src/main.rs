@@ -294,6 +294,10 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Ask for a workspace name before interactive creation.
 # prompt_new_workspace_name = false
 
+# Where new workspaces go: "after_current" (right after the workspace they were
+# created from) or "end" (at the end of the workspace list).
+# new_workspace_position = "after_current"
+
 # Draw borders around split panes.
 # "auto" draws them only for split panes, "always" also frames a lone pane
 # (only while pane_outer_borders is enabled), "off" disables them.

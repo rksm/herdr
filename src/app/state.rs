@@ -833,6 +833,7 @@ pub struct AppState {
     /// until it leaves the active tab or its agent starts new work.
     pub(crate) unread_hold: Option<PaneId>,
     pub confirm_close: bool,
+    pub new_workspace_position: crate::config::NewWorkspacePositionConfig,
     pub pane_borders: crate::config::PaneBordersConfig,
     pub pane_outer_borders: bool,
     pub pane_scrollbars: bool,
@@ -1076,6 +1077,7 @@ impl AppState {
             next_agent_state_change_seq: 0,
             unread_hold: None,
             confirm_close: true,
+            new_workspace_position: crate::config::NewWorkspacePositionConfig::AfterCurrent,
             pane_borders: crate::config::PaneBordersConfig::Auto,
             pane_outer_borders: true,
             pane_scrollbars: true,

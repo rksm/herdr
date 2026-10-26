@@ -983,6 +983,16 @@
           "description": "Ask for a workspace name before interactive TUI creation."
         },
         {
+          "key": "ui.new_workspace_position",
+          "type": "enum",
+          "default": "\"after_current\"",
+          "description": "Where a new workspace goes in the workspace list: right after the workspace it was created from, or at the end. Worktree workspaces keep their own placement.",
+          "values": [
+            "after_current",
+            "end"
+          ]
+        },
+        {
           "key": "ui.pane_borders",
           "type": "enum",
           "default": "\"auto\"",
