@@ -539,6 +539,7 @@ impl App {
             next_agent_state_change_seq: 0,
             unread_hold: None,
             confirm_close: config.ui.confirm_close,
+            new_workspace_position: config.ui.new_workspace_position,
             pane_borders: config.ui.pane_borders,
             pane_outer_borders: config.ui.pane_outer_borders,
             pane_scrollbars: config.ui.pane_scrollbars,
@@ -911,6 +912,7 @@ impl App {
 
                 self.loaded_host_cursor = config.ui.host_cursor;
                 self.state.confirm_close = config.ui.confirm_close;
+                self.state.new_workspace_position = config.ui.new_workspace_position;
                 self.state.pane_borders = config.ui.pane_borders;
                 self.state.pane_outer_borders = config.ui.pane_outer_borders;
                 self.state.pane_scrollbars = config.ui.pane_scrollbars;

@@ -898,6 +898,16 @@ pub enum TabBarPositionConfig {
     Bottom,
 }
 
+/// Where workspace.create places a new workspace in the workspace list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum NewWorkspacePositionConfig {
+    /// Right after the workspace it was created from.
+    #[default]
+    AfterCurrent,
+    End,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PaneBordersConfig {
     #[default]
@@ -984,6 +994,8 @@ pub struct UiConfig {
     pub prompt_new_tab_name: bool,
     /// Ask for a workspace name before interactive creation. Default: false.
     pub prompt_new_workspace_name: bool,
+    /// Place new workspaces after the current one or at the end. Default: after_current.
+    pub new_workspace_position: NewWorkspacePositionConfig,
     /// Draw borders around split panes. auto draws them only for split panes,
     /// always also frames a lone pane (only while pane_outer_borders is
     /// enabled, since every edge of a lone pane is an outer edge), off
@@ -1234,6 +1246,7 @@ impl Default for UiConfig {
             confirm_close: true,
             prompt_new_tab_name: true,
             prompt_new_workspace_name: false,
+            new_workspace_position: NewWorkspacePositionConfig::AfterCurrent,
             pane_borders: PaneBordersConfig::Auto,
             pane_outer_borders: true,
             pane_scrollbars: true,
@@ -1625,6 +1638,19 @@ prompt_new_workspace_name = true
 "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert!(config.ui.prompt_new_workspace_name);
+    }
+
+    #[test]
+    fn new_workspace_position_defaults_after_current_and_parses() {
+        assert_eq!(
+            Config::default().ui.new_workspace_position,
+            NewWorkspacePositionConfig::AfterCurrent
+        );
+        let config: Config = toml::from_str("[ui]\nnew_workspace_position = \"end\"").unwrap();
+        assert_eq!(
+            config.ui.new_workspace_position,
+            NewWorkspacePositionConfig::End
+        );
     }
 
     #[test]
