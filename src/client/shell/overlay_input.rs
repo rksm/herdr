@@ -706,6 +706,11 @@ impl ClientShellState {
                 outcome.repaint = true;
                 return;
             }
+            if matches!(code, KeyCode::Char('n' | 'p')) && modifiers == KeyModifiers::CONTROL {
+                self.move_navigator_selection(if code == KeyCode::Char('n') { 1 } else { -1 });
+                outcome.repaint = true;
+                return;
+            }
             if search_focused {
                 if let Some(ClientShellOverlay::Navigator(navigator)) = self.overlay.as_mut() {
                     if let Some(content_changed) = navigator.query.handle_key(key) {
@@ -717,16 +722,12 @@ impl ClientShellState {
                         return;
                     }
                 }
-                if code == KeyCode::Up
-                    || code == KeyCode::Char('p') && modifiers == KeyModifiers::CONTROL
-                {
+                if code == KeyCode::Up {
                     self.move_navigator_selection(-1);
                     outcome.repaint = true;
                     return;
                 }
-                if code == KeyCode::Down
-                    || code == KeyCode::Char('n') && modifiers == KeyModifiers::CONTROL
-                {
+                if code == KeyCode::Down {
                     self.move_navigator_selection(1);
                     outcome.repaint = true;
                     return;
