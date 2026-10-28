@@ -110,6 +110,13 @@ impl ClientShellState {
                     self.persist_chrome_preferences(outcome);
                 }
             }
+            crate::input::KeybindMatch::Action(
+                crate::input::KeybindAction::ToggleAllAgentGroups,
+            ) => {
+                self.toggle_all_agent_workspaces();
+                outcome.repaint = true;
+                self.persist_chrome_preferences(outcome);
+            }
             crate::input::KeybindMatch::Action(action) => {
                 if self.workspace_preview_action_blocked()
                     && matches!(

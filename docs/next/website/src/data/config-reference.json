@@ -866,6 +866,12 @@
           "description": "Fold or unfold the focused workspace's agents in the grouped agent panel. Clicking a workspace header does the same. Herdr saves the folds for the client."
         },
         {
+          "key": "keys.toggle_all_agent_groups",
+          "type": "keybinding",
+          "default": "\"prefix+shift+f\"",
+          "description": "Fold every workspace in the grouped agent panel. When every workspace is already folded, unfold them all instead."
+        },
+        {
           "key": "keys.indexed.tabs",
           "type": "string",
           "default": "unset",
