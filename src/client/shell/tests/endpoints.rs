@@ -1438,6 +1438,193 @@ fn active_workspace_is_the_only_highlight_when_machine_is_expanded() {
     );
 }
 
+/// A local machine with agents in `ws_1` and `ws_2`, and a remote machine that reuses
+/// the `ws_2` id and label for two agents of its own.
+fn two_machines_sharing_a_workspace_id(
+    config: ClientShellConfig,
+) -> (ClientShellState, ClientEndpointId) {
+    let mut local = snapshot();
+    let mut workspace = local.workspaces[0].clone();
+    workspace.workspace_id = "ws_2".into();
+    local.workspaces.push(workspace);
+    local.agents = (0..3)
+        .map(|index| {
+            let mut entry = agent("codex", AgentStatus::Idle, 1);
+            entry.pane_id = format!("pane_{}", index + 1);
+            entry.focused = index == 1;
+            if index == 2 {
+                entry.workspace_id = "ws_2".into();
+            }
+            entry
+        })
+        .collect();
+    let mut state = ClientShellState::new(config);
+    let profile = remote_profile();
+    let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
+    state.set_endpoint_catalog(&[profile]);
+    state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
+    state.set_snapshot(Box::new(local.clone()));
+    state.set_pane_surface(surface());
+    let mut remote = local;
+    remote.boot_id = "remote-boot".into();
+    let mut second = remote.agents[2].clone();
+    second.pane_id = "pane_4".into();
+    remote.agents = vec![remote.agents[2].clone(), second];
+    state.set_endpoint_snapshot(&endpoint_id, Box::new(remote));
+    (state, endpoint_id)
+}
+
+#[test]
+fn grouped_agent_panel_puts_headers_at_workspace_and_machine_boundaries() {
+    let (mut state, remote) =
+        two_machines_sharing_a_workspace_id(ClientShellConfig::from_config(&Config::default()));
+    let local = state.snapshot.as_deref().unwrap().clone();
+
+    let area = Rect::new(0, 0, 30, 16);
+    let mut buffer = Buffer::empty(area);
+    let mut hits = ShellHitMap::default();
+    let mut scroll = 0;
+    super::super::agent_sidebar::render_agent_panel(
+        &mut buffer,
+        area,
+        &local,
+        &ClientEndpointId::Local,
+        &state.config,
+        &HashMap::new(),
+        &mut scroll,
+        &mut hits,
+    );
+    assert_eq!(hits.agent_groups.len(), 2);
+    assert_eq!(hits.agents.len(), 3);
+    for (rect, _) in &hits.agents {
+        assert_eq!(rect.height, 2);
+    }
+    let second_header = hits.agent_groups[1].0;
+    assert!(hits.agents[1].0.bottom() <= second_header.y);
+    assert!(second_header.y < hits.agents[2].0.y);
+
+    for sort in [
+        crate::config::AgentPanelSortConfig::Spaces,
+        crate::config::AgentPanelSortConfig::Priority,
+    ] {
+        state.config.agent_panel_sort = sort;
+        state.compose(106, 40).expect("agent headers");
+        assert_eq!(state.hits.endpoint_agents.len(), 5);
+        for (rect, _, _) in &state.hits.endpoint_agents {
+            assert_eq!(rect.height, 2);
+        }
+        let groups = state
+            .hits
+            .agent_groups
+            .iter()
+            .map(|(_, endpoint_id, workspace_id)| (endpoint_id.clone(), workspace_id.as_str()))
+            .collect::<Vec<_>>();
+        if sort == crate::config::AgentPanelSortConfig::Spaces {
+            // The same workspace id on two machines gets two headers.
+            assert_eq!(
+                groups,
+                [
+                    (ClientEndpointId::Local, "ws_1"),
+                    (ClientEndpointId::Local, "ws_2"),
+                    (remote.clone(), "ws_2"),
+                ]
+            );
+        } else {
+            assert!(groups.is_empty());
+        }
+    }
+}
+
+#[test]
+fn multi_machine_agent_folds_belong_to_one_machine_and_persist() {
+    let path = std::env::temp_dir().join(format!(
+        "herdr-shell-agent-folds-{}-{}.json",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos()
+    ));
+    let config =
+        ClientShellConfig::from_config(&Config::default()).with_preferences_path(path.clone());
+    let (mut state, remote) = two_machines_sharing_a_workspace_id(config);
+    let targets = |state: &ClientShellState| {
+        state
+            .agent_navigation_targets()
+            .into_iter()
+            .map(|target| (target.endpoint_id, target.pane_id))
+            .collect::<Vec<_>>()
+    };
+    let all = [
+        (ClientEndpointId::Local, "pane_1".to_string()),
+        (ClientEndpointId::Local, "pane_2".to_string()),
+        (ClientEndpointId::Local, "pane_3".to_string()),
+        (remote.clone(), "pane_3".to_string()),
+        (remote.clone(), "pane_4".to_string()),
+    ];
+    assert_eq!(targets(&state), all);
+
+    state.compose(106, 40).expect("agent headers");
+    let header = state
+        .hits
+        .agent_groups
+        .iter()
+        .find(|(_, endpoint_id, _)| endpoint_id == &remote)
+        .expect("remote workspace header")
+        .0;
+    state.handle_raw_events(vec![RawInputEvent::Mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: header.x + 2,
+        row: header.y,
+        modifiers: KeyModifiers::NONE,
+    })]);
+
+    // Only the remote `ws_2` folds: its agents leave the list and become one stop.
+    state.compose(106, 40).expect("folded agent headers");
+    let visible = state
+        .hits
+        .endpoint_agents
+        .iter()
+        .map(|(_, endpoint_id, pane_id)| (endpoint_id.clone(), pane_id.clone()))
+        .collect::<Vec<_>>();
+    assert_eq!(visible, all[..3]);
+    assert_eq!(state.hits.agent_groups.len(), 3);
+    assert_eq!(targets(&state), all[..4]);
+
+    // The shortcut folds the focused workspace of the active machine only.
+    state.handle_input_bytes(b"\x02f");
+    assert!(super::super::agent_sidebar::agent_workspace_folded(
+        &state.collapsed_agent_workspaces,
+        &ClientEndpointId::Local,
+        "ws_1",
+    ));
+    assert_eq!(
+        targets(&state),
+        [all[0].clone(), all[2].clone(), all[3].clone()]
+    );
+
+    let reloaded = ClientShellState::new(
+        ClientShellConfig::from_config(&Config::default()).with_preferences_path(path.clone()),
+    );
+    for (endpoint_id, workspace_id, folded) in [
+        (ClientEndpointId::Local, "ws_1", true),
+        (ClientEndpointId::Local, "ws_2", false),
+        (remote.clone(), "ws_2", true),
+        (remote.clone(), "ws_1", false),
+    ] {
+        assert_eq!(
+            super::super::agent_sidebar::agent_workspace_folded(
+                &reloaded.collapsed_agent_workspaces,
+                &endpoint_id,
+                workspace_id,
+            ),
+            folded,
+            "{endpoint_id:?} {workspace_id}"
+        );
+    }
+    std::fs::remove_file(path).expect("remove agent fold preferences");
+}
+
 #[test]
 fn aggregate_agents_use_configured_rows_machine_token_and_status_colors() {
     use crate::api::schema::AgentStatus;

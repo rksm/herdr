@@ -435,6 +435,7 @@ pub(crate) fn render_sidebar(
         buffer,
         detail_area,
         snapshot,
+        state.active_endpoint_id,
         config,
         state.collapsed_agent_workspaces,
         state.agent_scroll,

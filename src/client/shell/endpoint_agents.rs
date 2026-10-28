@@ -1,3 +1,4 @@
+use super::agent_sidebar::AgentPanelEntry;
 use super::render::put_text;
 use super::*;
 
@@ -49,6 +50,7 @@ pub(super) fn render_expanded(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     config: &ClientShellConfig,
+    folds: &super::agent_sidebar::AgentWorkspaceFolds,
     agent_scroll: &mut usize,
     hits: &mut ShellHitMap,
 ) {
@@ -61,18 +63,23 @@ pub(super) fn render_expanded(
     ) {
         return;
     }
-    let rows = agent_rows(endpoints, active_endpoint_id, config);
-    super::agent_sidebar::render_agent_list(
+    let entries = agent_entries(
+        endpoints,
+        active_endpoint_id,
+        agent_view_label,
+        config,
+        folds,
+    );
+    super::agent_sidebar::render_agent_entries(
         buffer,
         area,
-        &rows,
+        &entries,
         agent_view_label.map(|_| " no matching agents"),
         config,
         agent_scroll,
         hits,
-        |row| row.agent.rows.len(),
+        |row| &row.agent,
         |buffer, rect, row, hits| {
-            super::agent_sidebar::render_agent_row(buffer, rect, &row.agent, config, 0);
             if row.stale {
                 buffer.set_style(
                     rect,
@@ -97,18 +104,53 @@ impl ClientShellState {
         if body_height == 0 {
             return;
         }
-        let rows = agent_rows(&self.endpoints, &self.active_endpoint_id, &self.config);
-        let Some(target) = rows
+        let Some(workspace_id) = self
+            .endpoints
             .iter()
-            .position(|row| &row.endpoint_id == endpoint_id && row.agent.pane_id == pane_id)
+            .find(|endpoint| &endpoint.endpoint_id == endpoint_id)
+            .and_then(|endpoint| endpoint.snapshot.as_deref())
+            .and_then(|snapshot| {
+                snapshot
+                    .agents
+                    .iter()
+                    .find(|agent| agent.pane_id == pane_id)
+            })
+            .map(|agent| agent.workspace_id.as_str())
         else {
             return;
         };
-        let heights = rows
+        let entries = agent_entries(
+            &self.endpoints,
+            &self.active_endpoint_id,
+            self.snapshot
+                .as_deref()
+                .and_then(|snapshot| snapshot.agent_view_label.as_deref()),
+            &self.config,
+            &self.collapsed_agent_workspaces,
+        );
+        // An agent in a folded workspace shows as its group header.
+        let Some(target) = entries.iter().position(|entry| match entry {
+            AgentPanelEntry::Agent(row) => {
+                &row.endpoint_id == endpoint_id && row.agent.pane_id == pane_id
+            }
+            AgentPanelEntry::Group(header) => {
+                header.collapsed
+                    && &header.endpoint_id == endpoint_id
+                    && header.workspace_id == workspace_id
+            }
+        }) else {
+            return;
+        };
+        let heights = entries
             .iter()
-            .map(|row| row.agent.rows.len().max(1).min(u16::MAX as usize) as u16)
+            .map(|entry| {
+                entry
+                    .lines(|row| row.agent.rows.len())
+                    .max(1)
+                    .min(u16::MAX as usize) as u16
+            })
             .collect::<Vec<_>>();
-        let mut gaps = vec![self.config.agents.row_gap; rows.len()];
+        let mut gaps = vec![self.config.agents.row_gap; entries.len()];
         if let Some(last) = gaps.last_mut() {
             *last = 0;
         }
@@ -125,8 +167,32 @@ impl ClientShellState {
 struct EndpointAgentRow<'a> {
     endpoint_id: ClientEndpointId,
     machine_label: String,
+    snapshot: &'a ClientShellSnapshot,
     stale: bool,
     agent: super::agent_sidebar::AgentRow<'a>,
+}
+
+fn agent_entries<'a>(
+    endpoints: &'a [ClientShellEndpoint],
+    active_endpoint_id: &ClientEndpointId,
+    agent_view_label: Option<&str>,
+    config: &ClientShellConfig,
+    folds: &super::agent_sidebar::AgentWorkspaceFolds,
+) -> Vec<AgentPanelEntry<EndpointAgentRow<'a>>> {
+    let rows = agent_rows(endpoints, active_endpoint_id, config);
+    if !super::agent_sidebar::groups_agents(config.agent_panel_sort, agent_view_label) {
+        return rows.into_iter().map(AgentPanelEntry::Agent).collect();
+    }
+    super::agent_sidebar::group_agent_rows(
+        rows,
+        folds,
+        |row| (&row.endpoint_id, &row.agent),
+        |row| {
+            let workspace =
+                super::agent_sidebar::workspace_label(row.snapshot, row.agent.workspace_id);
+            format!("{} · {workspace}", row.machine_label)
+        },
+    )
 }
 
 fn agent_rows<'a>(
@@ -169,6 +235,7 @@ fn agent_rows<'a>(
         Some(EndpointAgentRow {
             endpoint_id: row.endpoint.endpoint_id.clone(),
             machine_label: row.endpoint.label.to_owned(),
+            snapshot: row.endpoint.snapshot,
             stale: row.endpoint.stale(),
             agent,
         })

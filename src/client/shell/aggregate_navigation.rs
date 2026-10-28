@@ -50,6 +50,7 @@ pub(super) struct AggregateAgentRow<'a> {
 
 pub(super) struct AggregateAgentTarget {
     pub(super) endpoint_id: ClientEndpointId,
+    pub(super) workspace_id: String,
     pub(super) pane_id: String,
 }
 
@@ -270,6 +271,7 @@ pub(super) fn online_agent_targets(
         .filter(|row| !row.endpoint.stale())
         .map(|row| AggregateAgentTarget {
             endpoint_id: row.endpoint.endpoint_id.clone(),
+            workspace_id: row.agent.workspace_id.clone(),
             pane_id: row.agent.pane_id.clone(),
         })
         .collect()

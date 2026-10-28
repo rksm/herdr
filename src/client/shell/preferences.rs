@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
@@ -6,6 +7,8 @@ use std::{
 static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
 
 use serde::{Deserialize, Serialize};
+
+use crate::client::endpoint::ClientEndpointId;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(super) struct ClientRemoteCollapsedGroups {
@@ -30,6 +33,47 @@ pub(super) struct ClientChromePreferences {
     pub(super) remote_collapsed_groups: Vec<ClientRemoteCollapsedGroups>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(super) collapsed_agent_workspaces: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(super) remote_collapsed_agent_workspaces: Vec<ClientRemoteCollapsedGroups>,
+}
+
+/// Reads per-machine groups saved by SSH profile id, skipping invalid ids.
+pub(super) fn remote_groups_by_endpoint(
+    saved: Vec<ClientRemoteCollapsedGroups>,
+) -> HashMap<ClientEndpointId, HashSet<String>> {
+    let mut groups = HashMap::<ClientEndpointId, HashSet<String>>::new();
+    for saved in saved {
+        let Ok(profile_id) = crate::client::endpoint::ProfileId::parse(saved.profile_id) else {
+            continue;
+        };
+        groups
+            .entry(ClientEndpointId::Ssh(profile_id))
+            .or_default()
+            .extend(saved.collapsed_groups);
+    }
+    groups
+}
+
+/// Saves the non-empty groups of SSH machines, sorted for stable files.
+pub(super) fn saved_remote_groups(
+    groups: &HashMap<ClientEndpointId, HashSet<String>>,
+) -> Vec<ClientRemoteCollapsedGroups> {
+    let mut saved = groups
+        .iter()
+        .filter_map(|(endpoint_id, groups)| {
+            let ClientEndpointId::Ssh(profile_id) = endpoint_id else {
+                return None;
+            };
+            let mut collapsed_groups = groups.iter().cloned().collect::<Vec<_>>();
+            collapsed_groups.sort();
+            (!collapsed_groups.is_empty()).then(|| ClientRemoteCollapsedGroups {
+                profile_id: profile_id.to_string(),
+                collapsed_groups,
+            })
+        })
+        .collect::<Vec<_>>();
+    saved.sort_by(|left, right| left.profile_id.cmp(&right.profile_id));
+    saved
 }
 
 pub(super) fn path_for_local_endpoint(socket_path: &Path) -> PathBuf {
