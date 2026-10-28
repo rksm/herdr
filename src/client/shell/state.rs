@@ -914,6 +914,8 @@ pub(crate) struct ClientShellState {
     pub(super) reveal_navigation_workspace: bool,
     pub(super) overlay: Option<ClientShellOverlay>,
     pub(super) previous_pane_id: Option<String>,
+    /// Agents this window focused, one history per machine.
+    pub(super) agent_history: HashMap<ClientEndpointId, super::agent_history::AgentHistory>,
     pub(super) pane_mouse_gesture: Option<ClientPaneMouseGesture>,
     pub(super) link_hover: Option<super::link_hover::LinkHover>,
     pub(super) url_click_consumes_until_up: bool,
@@ -1087,6 +1089,7 @@ impl ClientShellState {
             reveal_navigation_workspace: false,
             overlay,
             previous_pane_id: None,
+            agent_history: HashMap::new(),
             pane_mouse_gesture: None,
             link_hover: None,
             url_click_consumes_until_up: false,
@@ -1641,6 +1644,10 @@ impl ClientShellState {
                 Some(_) => {}
             }
         }
+        self.agent_history
+            .entry(self.active_endpoint_id.clone())
+            .or_default()
+            .observe(&snapshot);
         self.snapshot = Some(snapshot);
         self.reconcile_pending_workspace_highlight();
         let pending_surface = self.pending_pane_surface.take();

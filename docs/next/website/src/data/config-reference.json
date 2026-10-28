@@ -632,6 +632,18 @@
           "description": "Mark the focused idle agent unread until you view it again."
         },
         {
+          "key": "keys.agent_history_back",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Focus the agent you selected before the current one. Each client window remembers the last 50 agents it focused on each machine. Unset by default."
+        },
+        {
+          "key": "keys.agent_history_forward",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "After going back in the agent history, focus the next agent again. Unset by default."
+        },
+        {
           "key": "keys.focus_agent",
           "type": "keybinding",
           "default": "unset",
