@@ -1211,6 +1211,18 @@ impl ClientShellState {
                     pane_id: panes[next].pane_id.clone(),
                 }))
             }
+            KeybindAction::AgentHistoryBack | KeybindAction::AgentHistoryForward => {
+                let delta = if action == KeybindAction::AgentHistoryBack {
+                    -1
+                } else {
+                    1
+                };
+                let pane_id = self
+                    .agent_history
+                    .get_mut(&self.active_endpoint_id)?
+                    .step(snapshot, delta)?;
+                Some(Method::PaneFocus(PaneTarget { pane_id }))
+            }
             KeybindAction::LastPane => {
                 let pane_id = self.previous_pane_id.as_ref()?;
                 if Some(pane_id.as_str()) == focused_pane.as_deref()

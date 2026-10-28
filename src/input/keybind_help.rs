@@ -153,6 +153,14 @@ pub(crate) fn keybind_help_groups(
                     binding_label(&keybinds.mark_agent_unread),
                     "mark agent unread",
                 ),
+                entry(
+                    binding_label(&keybinds.agent_history_back),
+                    "agent history back",
+                ),
+                entry(
+                    binding_label(&keybinds.agent_history_forward),
+                    "agent history forward",
+                ),
                 entry(indexed_label(&keybinds.focus_agent), "focus agent 1-9"),
                 entry(binding_label(&keybinds.new_tab), "new tab"),
                 entry(binding_label(&keybinds.rename_tab), "rename tab"),

@@ -33,6 +33,8 @@ pub(crate) enum KeybindAction {
     PreviousAgent,
     NextAgent,
     MarkAgentUnread,
+    AgentHistoryBack,
+    AgentHistoryForward,
     NewTab,
     RenameTab,
     ToggleTabMark,
@@ -118,6 +120,14 @@ pub(crate) fn resolve_non_indexed_action(
         (&keybinds.previous_agent, KeybindAction::PreviousAgent),
         (&keybinds.next_agent, KeybindAction::NextAgent),
         (&keybinds.mark_agent_unread, KeybindAction::MarkAgentUnread),
+        (
+            &keybinds.agent_history_back,
+            KeybindAction::AgentHistoryBack,
+        ),
+        (
+            &keybinds.agent_history_forward,
+            KeybindAction::AgentHistoryForward,
+        ),
         (&keybinds.new_tab, KeybindAction::NewTab),
         (&keybinds.rename_tab, KeybindAction::RenameTab),
         (&keybinds.toggle_tab_mark, KeybindAction::ToggleTabMark),

@@ -1570,6 +1570,46 @@ fn fold_all_folds_every_machine_workspace_then_unfolds_them() {
 }
 
 #[test]
+fn agent_history_keys_focus_earlier_agents_of_the_active_machine() {
+    let config: Config = toml::from_str(
+        "[keys]\nagent_history_back = 'prefix+,'\nagent_history_forward = 'prefix+.'",
+    )
+    .expect("agent history keys");
+    let (mut state, remote) =
+        two_machines_sharing_a_workspace_id(ClientShellConfig::from_config(&config));
+    let focus = |state: &mut ClientShellState, revision: u64, pane_id: &str| {
+        let mut local = state.snapshot.as_deref().expect("local snapshot").clone();
+        local.revision = revision;
+        local.focused_pane_id = Some(pane_id.into());
+        state.set_snapshot(Box::new(local));
+    };
+    let focused_by = |outcome: ClientShellInput| match outcome.actions.as_slice() {
+        [ClientShellAction::Endpoint { request, .. }] => match &request.method {
+            crate::api::schema::Method::PaneFocus(target) => Some(target.pane_id.clone()),
+            _ => None,
+        },
+        _ => None,
+    };
+
+    // The local machine starts on pane_1; the user then selects pane_2.
+    focus(&mut state, 2, "pane_2");
+    // Visiting the other machine keeps the local history.
+    assert!(state.activate_endpoint_projection(&remote));
+    assert_eq!(focused_by(state.handle_input_bytes(b"\x02,")), None);
+    assert!(state.activate_endpoint_projection(&ClientEndpointId::Local));
+
+    assert_eq!(
+        focused_by(state.handle_input_bytes(b"\x02,")).as_deref(),
+        Some("pane_1")
+    );
+    focus(&mut state, 3, "pane_1");
+    assert_eq!(
+        focused_by(state.handle_input_bytes(b"\x02.")).as_deref(),
+        Some("pane_2")
+    );
+}
+
+#[test]
 fn multi_machine_agent_folds_belong_to_one_machine_and_persist() {
     let path = std::env::temp_dir().join(format!(
         "herdr-shell-agent-folds-{}-{}.json",
