@@ -245,6 +245,37 @@ impl ClientShellState {
         navigator.selected = rows.get(selected).map(|row| row.target.clone());
     }
 
+    fn page_navigator(&mut self, forward: bool) {
+        let Some(metrics) = self.hits.navigator_scroll_metrics else {
+            return;
+        };
+        let Some(ClientShellOverlay::Navigator(navigator)) = self.overlay.as_mut() else {
+            return;
+        };
+        let rows =
+            render::client_navigator_rows(&self.endpoints, &self.active_endpoint_id, navigator);
+        if rows.is_empty() {
+            navigator.selected = None;
+            return;
+        }
+        let viewport_rows = metrics.viewport_rows.max(1);
+        let page = viewport_rows as isize * if forward { 1 } else { -1 };
+        let selected =
+            super::aggregate_navigation::navigator_selected_index(&rows, navigator).unwrap_or(0);
+        let scroll = super::aggregate_navigation::navigator_scroll(
+            navigator,
+            selected,
+            rows.len(),
+            viewport_rows,
+        );
+        // Scroll by the same page so the selection keeps its row on screen.
+        navigator.scroll = scroll
+            .saturating_add_signed(page)
+            .min(rows.len().saturating_sub(viewport_rows));
+        let next = selected.saturating_add_signed(page).min(rows.len() - 1);
+        navigator.selected = Some(rows[next].target.clone());
+    }
+
     fn move_navigator_workspace(&mut self, forward: bool) {
         let Some(ClientShellOverlay::Navigator(navigator)) = self.overlay.as_mut() else {
             return;
@@ -662,6 +693,17 @@ impl ClientShellState {
             }
             if code == KeyCode::Enter {
                 self.accept_navigator_selection(outcome);
+                return;
+            }
+            // The search field ignores these keys, so they work while searching too.
+            if matches!(code, KeyCode::PageUp | KeyCode::PageDown) && modifiers.is_empty() {
+                self.page_navigator(code == KeyCode::PageDown);
+                outcome.repaint = true;
+                return;
+            }
+            if matches!(code, KeyCode::Up | KeyCode::Down) && modifiers == KeyModifiers::CONTROL {
+                self.move_navigator_workspace(code == KeyCode::Down);
+                outcome.repaint = true;
                 return;
             }
             if search_focused {

@@ -804,11 +804,12 @@ fn render_navigator_overlay(
     let body = Rect::new(i.x, i.y + 2, i.width, i.height.saturating_sub(5));
     let selected = super::aggregate_navigation::navigator_selected_index(&rows, n).unwrap_or(0);
     let max = rows.len().saturating_sub(body.height as usize);
-    let scroll = n
-        .scroll
-        .max(selected.saturating_sub(body.height.saturating_sub(1) as usize))
-        .min(selected)
-        .min(max);
+    let scroll = super::aggregate_navigation::navigator_scroll(
+        n,
+        selected,
+        rows.len(),
+        usize::from(body.height),
+    );
     let metrics = crate::pane::ScrollMetrics {
         offset_from_bottom: max.saturating_sub(scroll),
         max_offset_from_bottom: max,
@@ -1028,7 +1029,7 @@ fn render_navigator_overlay(
         i.bottom() - 1,
         i.width,
         if n.search_focused {
-            " search type · move ↑↓/ctrl+n/p · open enter · back esc"
+            " search type · move ↑↓/ctrl+n/p · workspace ctrl+↑↓ · open enter · back esc"
         } else {
             " ↑↓/j/k rows · ←→ workspace · / search · a/b/w/i/d filter · enter open · esc close"
         },
