@@ -1768,6 +1768,62 @@ fn grouped_agents_snapshot() -> ClientShellSnapshot {
 }
 
 #[test]
+fn folded_workspace_header_shows_the_most_urgent_agent_state() {
+    use super::super::agent_sidebar::{agent_panel_entries, AgentPanelEntry};
+    let local = crate::client::endpoint::ClientEndpointId::Local;
+    let folds = HashMap::from([(local.clone(), HashSet::from(["ws_2".to_string()]))]);
+    let config = ClientShellConfig::from_config(&Config::default());
+    // Blocked ranks over working, working over done, and an all-idle group shows nothing.
+    for (statuses, expected) in [
+        ([AgentStatus::Idle, AgentStatus::Idle], None),
+        (
+            [AgentStatus::Idle, AgentStatus::Done],
+            Some(AgentStatus::Done),
+        ),
+        (
+            [AgentStatus::Done, AgentStatus::Working],
+            Some(AgentStatus::Working),
+        ),
+        (
+            [AgentStatus::Working, AgentStatus::Blocked],
+            Some(AgentStatus::Blocked),
+        ),
+    ] {
+        let mut grouped = grouped_agents_snapshot();
+        for (agent, status) in grouped.agents[1..].iter_mut().zip(statuses) {
+            agent.agent_status = status;
+        }
+        let status = agent_panel_entries(&grouped, &local, &config, &folds)
+            .into_iter()
+            .find_map(|entry| match entry {
+                AgentPanelEntry::Group(header) if header.collapsed => Some(header.status),
+                _ => None,
+            })
+            .expect("folded header");
+        assert_eq!(status, expected, "{statuses:?}");
+
+        let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+        state.config.status_indicators = crate::config::StatusIndicatorStyle::Symbols;
+        state.collapsed_agent_workspaces = folds.clone();
+        state.set_snapshot(Box::new(grouped));
+        state.set_pane_surface(surface());
+        let frame = state.compose(106, 30).expect("agent sidebar frame");
+        let buffer = frame.to_ratatui_buffer().unwrap();
+        let header = state.hits.agent_groups[1].0;
+        let line = (header.x..header.right())
+            .map(|x| buffer[(x, header.y)].symbol())
+            .collect::<String>();
+        let icon = match expected {
+            Some(AgentStatus::Blocked) => " ▸ × phyron",
+            Some(AgentStatus::Working) => " ▸ ◐ phyron",
+            Some(AgentStatus::Done) => " ▸ ✓ phyron",
+            _ => " ▸ phyron",
+        };
+        assert!(line.starts_with(icon), "{line:?}");
+    }
+}
+
+#[test]
 fn agent_panel_groups_agents_under_folding_workspace_headers() {
     use super::super::agent_sidebar::{agent_panel_entries, AgentPanelEntry};
     let grouped = grouped_agents_snapshot();
