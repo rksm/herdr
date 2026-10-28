@@ -117,6 +117,8 @@ pub(super) struct AgentGroupHeader {
     pub(super) collapsed: bool,
     pub(super) agents: usize,
     pub(super) waiting: usize,
+    /// The most urgent agent state, shown on a folded header; none when all are idle.
+    pub(super) status: Option<crate::api::schema::AgentStatus>,
     pub(super) focused: bool,
     pub(super) first: bool,
 }
@@ -165,6 +167,16 @@ pub(super) fn group_agent_rows<'a, T>(
                 .iter()
                 .filter(|row| key(row).1.status == crate::api::schema::AgentStatus::Blocked)
                 .count(),
+            status: {
+                use crate::api::schema::AgentStatus;
+                [
+                    AgentStatus::Blocked,
+                    AgentStatus::Working,
+                    AgentStatus::Done,
+                ]
+                .into_iter()
+                .find(|status| group.iter().any(|row| key(row).1.status == *status))
+            },
             focused: folded && group.iter().any(|row| key(row).1.focused),
             first: entries.is_empty(),
             endpoint_id,
@@ -302,18 +314,22 @@ fn render_agent_group(
     config: &ClientShellConfig,
 ) {
     let palette = &config.palette;
-    let mut spans = vec![
-        ratatui::text::Span::styled(
-            if header.collapsed { " ▸ " } else { " ▾ " },
-            Style::default().fg(palette.overlay0),
-        ),
-        ratatui::text::Span::styled(
-            header.label.clone(),
-            Style::default()
-                .fg(palette.accent)
-                .add_modifier(Modifier::BOLD),
-        ),
-    ];
+    let mut spans = vec![ratatui::text::Span::styled(
+        if header.collapsed { " ▸ " } else { " ▾ " },
+        Style::default().fg(palette.overlay0),
+    )];
+    if let Some(status) = header.status.filter(|_| header.collapsed) {
+        spans.push(ratatui::text::Span::styled(
+            format!("{} ", status_icon(status, config.status_indicators)),
+            Style::default().fg(status_color(status, palette)),
+        ));
+    }
+    spans.push(ratatui::text::Span::styled(
+        header.label.clone(),
+        Style::default()
+            .fg(palette.accent)
+            .add_modifier(Modifier::BOLD),
+    ));
     if header.collapsed {
         let noun = if header.agents == 1 {
             "agent"
