@@ -1772,8 +1772,16 @@ fn agent_panel_groups_agents_under_folding_workspace_headers() {
     use super::super::agent_sidebar::{agent_panel_entries, AgentPanelEntry};
     let grouped = grouped_agents_snapshot();
     let config = ClientShellConfig::from_config(&Config::default());
-    let shape = |collapsed: &HashSet<String>| {
-        agent_panel_entries(&grouped, &config, collapsed)
+    let local = crate::client::endpoint::ClientEndpointId::Local;
+    let shape = |folded: &[&str]| {
+        let folds = HashMap::from([(
+            local.clone(),
+            folded
+                .iter()
+                .map(|workspace| workspace.to_string())
+                .collect(),
+        )]);
+        agent_panel_entries(&grouped, &local, &config, &folds)
             .into_iter()
             .map(|entry| match entry {
                 AgentPanelEntry::Group(header) => format!(
@@ -1786,7 +1794,7 @@ fn agent_panel_groups_agents_under_folding_workspace_headers() {
     };
 
     assert_eq!(
-        shape(&HashSet::new()),
+        shape(&[]),
         [
             "client-shell:false:1:0",
             "pane_1",
@@ -1796,7 +1804,7 @@ fn agent_panel_groups_agents_under_folding_workspace_headers() {
         ]
     );
     assert_eq!(
-        shape(&HashSet::from(["ws_2".to_string()])),
+        shape(&["ws_2"]),
         ["client-shell:false:1:0", "pane_1", "phyron:true:2:1"]
     );
 }
@@ -1806,24 +1814,22 @@ fn folded_workspace_is_a_single_agent_navigation_stop() {
     use super::super::agent_sidebar::agent_navigation_stops;
     let grouped = grouped_agents_snapshot();
     let sort = crate::config::AgentPanelSortConfig::Spaces;
-    let stops = |collapsed: &HashSet<String>| {
-        agent_navigation_stops(&grouped, sort, collapsed)
+    let stops = |folded: Option<&HashSet<String>>| {
+        agent_navigation_stops(&grouped, sort, folded)
             .into_iter()
             .map(|(pane_id, _)| pane_id)
             .collect::<Vec<_>>()
     };
 
-    assert_eq!(stops(&HashSet::new()), ["pane_1", "pane_2", "pane_3"]);
-    assert_eq!(
-        stops(&HashSet::from(["ws_2".to_string()])),
-        ["pane_1", "pane_2"]
-    );
+    let ws_2 = HashSet::from(["ws_2".to_string()]);
+    assert_eq!(stops(None), ["pane_1", "pane_2", "pane_3"]);
+    assert_eq!(stops(Some(&ws_2)), ["pane_1", "pane_2"]);
     // Priority order never folds.
     assert_eq!(
         agent_navigation_stops(
             &grouped,
             crate::config::AgentPanelSortConfig::Priority,
-            &HashSet::from(["ws_2".to_string()]),
+            Some(&ws_2),
         )
         .len(),
         3

@@ -561,6 +561,7 @@ pub(super) fn render_expanded(
         state.endpoints,
         state.active_endpoint_id,
         config,
+        state.collapsed_agent_workspaces,
         state.agent_scroll,
         hits,
     );

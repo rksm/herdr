@@ -102,7 +102,10 @@ impl ClientShellState {
                     .as_deref()
                     .and_then(|snapshot| snapshot.focused_workspace_id.clone());
                 if let Some(workspace_id) = workspace_id {
-                    self.toggle_collapsed_agent_workspace(workspace_id);
+                    self.toggle_collapsed_agent_workspace(
+                        self.active_endpoint_id.clone(),
+                        workspace_id,
+                    );
                     outcome.repaint = true;
                     self.persist_chrome_preferences(outcome);
                 }
@@ -981,7 +984,8 @@ impl ClientShellState {
                 let agents = super::agent_sidebar::agent_navigation_stops(
                     snapshot,
                     self.config.agent_panel_sort,
-                    &self.collapsed_agent_workspaces,
+                    self.collapsed_agent_workspaces
+                        .get(&self.active_endpoint_id),
                 );
                 Some(Method::PaneFocus(PaneTarget {
                     pane_id: agents.get(index)?.0.clone(),
@@ -991,7 +995,8 @@ impl ClientShellState {
                 let agents = super::agent_sidebar::agent_navigation_stops(
                     snapshot,
                     self.config.agent_panel_sort,
-                    &self.collapsed_agent_workspaces,
+                    self.collapsed_agent_workspaces
+                        .get(&self.active_endpoint_id),
                 );
                 if agents.is_empty() {
                     return None;
@@ -1006,8 +1011,11 @@ impl ClientShellState {
                 // A focused agent hidden in a folded workspace counts as that workspace's stop.
                 let current = agents.iter().position(|(pane_id, workspace_id)| {
                     Some(pane_id.as_str()) == snapshot.focused_pane_id.as_deref()
-                        || (self.collapsed_agent_workspaces.contains(workspace_id)
-                            && Some(workspace_id.as_str()) == focused_workspace)
+                        || (super::agent_sidebar::agent_workspace_folded(
+                            &self.collapsed_agent_workspaces,
+                            &self.active_endpoint_id,
+                            workspace_id,
+                        ) && Some(workspace_id.as_str()) == focused_workspace)
                 });
                 let next = match (current, action) {
                     (Some(current), KeybindAction::PreviousAgent) => {

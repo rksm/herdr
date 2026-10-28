@@ -2141,10 +2141,12 @@ impl ClientShellState {
                     .hits
                     .agent_groups
                     .iter()
-                    .find(|(rect, _)| super::contains(*rect, point))
-                    .map(|(_, workspace_id)| workspace_id.clone());
-                if let Some(workspace_id) = agent_group {
-                    self.toggle_collapsed_agent_workspace(workspace_id);
+                    .find(|(rect, _, _)| super::contains(*rect, point))
+                    .map(|(_, endpoint_id, workspace_id)| {
+                        (endpoint_id.clone(), workspace_id.clone())
+                    });
+                if let Some((endpoint_id, workspace_id)) = agent_group {
+                    self.toggle_collapsed_agent_workspace(endpoint_id, workspace_id);
                     outcome.repaint = true;
                     self.persist_chrome_preferences(outcome);
                     return;

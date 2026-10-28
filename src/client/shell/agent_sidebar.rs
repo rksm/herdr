@@ -55,8 +55,9 @@ pub(super) fn render_agent_panel(
     buffer: &mut Buffer,
     area: Rect,
     snapshot: &ClientShellSnapshot,
+    endpoint_id: &ClientEndpointId,
     config: &ClientShellConfig,
-    collapsed: &HashSet<String>,
+    folds: &AgentWorkspaceFolds,
     agent_scroll: &mut usize,
     hits: &mut ShellHitMap,
 ) {
@@ -70,11 +71,8 @@ pub(super) fn render_agent_panel(
         return;
     }
 
-    let entries = agent_panel_entries(snapshot, config, collapsed);
-    let grouped = entries
-        .iter()
-        .any(|entry| matches!(entry, AgentPanelEntry::Group(_)));
-    render_agent_list(
+    let entries = agent_panel_entries(snapshot, endpoint_id, config, folds);
+    render_agent_entries(
         buffer,
         area,
         &entries,
@@ -85,27 +83,35 @@ pub(super) fn render_agent_panel(
         config,
         agent_scroll,
         hits,
-        |entry| match entry {
-            AgentPanelEntry::Group(header) => 1 + usize::from(!header.first),
-            AgentPanelEntry::Agent(row) => row.rows.len(),
-        },
-        |buffer, rect, entry, hits| match entry {
-            AgentPanelEntry::Group(header) => {
-                // Groups after the first carry one blank spacer line above the header.
-                let line = Rect::new(rect.x, rect.bottom().saturating_sub(1), rect.width, 1);
-                hits.agent_groups.push((line, header.workspace_id.clone()));
-                render_agent_group(buffer, line, header, config);
-            }
-            AgentPanelEntry::Agent(row) => {
-                hits.agents.push((rect, row.pane_id.clone()));
-                render_agent_row(buffer, rect, row, config, if grouped { 2 } else { 0 });
-            }
-        },
+        |row| row,
+        |_, rect, row, hits| hits.agents.push((rect, row.pane_id.clone())),
     );
+}
+
+/// Folded agent groups: workspace ids per machine, because ids repeat across machines.
+pub(super) type AgentWorkspaceFolds = HashMap<ClientEndpointId, HashSet<String>>;
+
+pub(super) fn agent_workspace_folded(
+    folds: &AgentWorkspaceFolds,
+    endpoint_id: &ClientEndpointId,
+    workspace_id: &str,
+) -> bool {
+    folds
+        .get(endpoint_id)
+        .is_some_and(|workspaces| workspaces.contains(workspace_id))
+}
+
+/// Only the unfiltered "spaces" order groups agents under workspace headers.
+pub(super) fn groups_agents(
+    sort: crate::config::AgentPanelSortConfig,
+    agent_view_label: Option<&str>,
+) -> bool {
+    sort == crate::config::AgentPanelSortConfig::Spaces && agent_view_label.is_none()
 }
 
 /// Workspace header in the grouped agent panel. Folded headers summarize their agents.
 pub(super) struct AgentGroupHeader {
+    pub(super) endpoint_id: ClientEndpointId,
     pub(super) workspace_id: String,
     pub(super) label: String,
     pub(super) collapsed: bool,
@@ -115,50 +121,54 @@ pub(super) struct AgentGroupHeader {
     pub(super) first: bool,
 }
 
-pub(super) enum AgentPanelEntry<'a> {
+pub(super) enum AgentPanelEntry<T> {
     Group(AgentGroupHeader),
-    Agent(AgentRow<'a>),
+    Agent(T),
 }
 
-/// Groups agents under workspace headers in the unfiltered "spaces" order; folded
-/// workspaces keep only their header. Other orders stay a flat list.
-pub(super) fn agent_panel_entries<'a>(
-    snapshot: &'a ClientShellSnapshot,
-    config: &ClientShellConfig,
-    collapsed: &HashSet<String>,
-) -> Vec<AgentPanelEntry<'a>> {
-    let rows = agent_rows(snapshot, config, None);
-    if config.agent_panel_sort != crate::config::AgentPanelSortConfig::Spaces
-        || snapshot.agent_view_label.is_some()
-    {
-        return rows.into_iter().map(AgentPanelEntry::Agent).collect();
+impl<T> AgentPanelEntry<T> {
+    /// Groups after the first carry one blank spacer line above the header.
+    pub(super) fn lines(&self, agent_lines: impl Fn(&T) -> usize) -> usize {
+        match self {
+            Self::Group(header) => 1 + usize::from(!header.first),
+            Self::Agent(agent) => agent_lines(agent),
+        }
     }
+}
+
+/// Puts each run of agents from one machine's workspace under a header. Folded
+/// workspaces keep only their header. `key` names an agent's machine and row.
+pub(super) fn group_agent_rows<'a, T>(
+    rows: Vec<T>,
+    folds: &AgentWorkspaceFolds,
+    key: impl Fn(&T) -> (&ClientEndpointId, &AgentRow<'a>),
+    label: impl Fn(&T) -> String,
+) -> Vec<AgentPanelEntry<T>> {
     let mut entries = Vec::new();
     let mut rows = rows.into_iter().peekable();
     while let Some(first) = rows.next() {
-        let workspace_id = first.workspace_id;
+        let (endpoint_id, row) = key(&first);
+        let (endpoint_id, workspace_id) = (endpoint_id.clone(), row.workspace_id.to_owned());
         let mut group = vec![first];
-        while let Some(row) = rows.next_if(|row| row.workspace_id == workspace_id) {
+        while let Some(row) = rows.next_if(|row| {
+            let (row_endpoint_id, row) = key(row);
+            *row_endpoint_id == endpoint_id && row.workspace_id == workspace_id
+        }) {
             group.push(row);
         }
-        let folded = collapsed.contains(workspace_id);
-        let label = snapshot
-            .workspaces
-            .iter()
-            .find(|workspace| workspace.workspace_id == workspace_id)
-            .map(|workspace| workspace.label.clone())
-            .unwrap_or_default();
+        let folded = agent_workspace_folded(folds, &endpoint_id, &workspace_id);
         entries.push(AgentPanelEntry::Group(AgentGroupHeader {
-            label,
+            label: label(&group[0]),
             collapsed: folded,
             agents: group.len(),
             waiting: group
                 .iter()
-                .filter(|row| row.status == crate::api::schema::AgentStatus::Blocked)
+                .filter(|row| key(row).1.status == crate::api::schema::AgentStatus::Blocked)
                 .count(),
-            focused: folded && group.iter().any(|row| row.focused),
+            focused: folded && group.iter().any(|row| key(row).1.focused),
             first: entries.is_empty(),
-            workspace_id: workspace_id.to_string(),
+            endpoint_id,
+            workspace_id,
         }));
         if !folded {
             entries.extend(group.into_iter().map(AgentPanelEntry::Agent));
@@ -167,35 +177,122 @@ pub(super) fn agent_panel_entries<'a>(
     entries
 }
 
-/// Navigation stops in panel order: every visible agent, and one stop per folded
-/// workspace (its first agent, so focusing it switches to that workspace).
+pub(super) fn agent_panel_entries<'a>(
+    snapshot: &'a ClientShellSnapshot,
+    endpoint_id: &'a ClientEndpointId,
+    config: &ClientShellConfig,
+    folds: &AgentWorkspaceFolds,
+) -> Vec<AgentPanelEntry<AgentRow<'a>>> {
+    let rows = agent_rows(snapshot, config, None);
+    if !groups_agents(
+        config.agent_panel_sort,
+        snapshot.agent_view_label.as_deref(),
+    ) {
+        return rows.into_iter().map(AgentPanelEntry::Agent).collect();
+    }
+    group_agent_rows(
+        rows,
+        folds,
+        |row| (endpoint_id, row),
+        |row| workspace_label(snapshot, row.workspace_id).to_owned(),
+    )
+}
+
+pub(super) fn workspace_label<'a>(
+    snapshot: &'a ClientShellSnapshot,
+    workspace_id: &str,
+) -> &'a str {
+    snapshot
+        .workspaces
+        .iter()
+        .find(|workspace| workspace.workspace_id == workspace_id)
+        .map_or("", |workspace| workspace.label.as_str())
+}
+
+/// Renders agent entries: workspace headers here, each agent with `render_agent_row`
+/// and then `agent_hits`.
+pub(super) fn render_agent_entries<'a, T>(
+    buffer: &mut Buffer,
+    area: Rect,
+    entries: &[AgentPanelEntry<T>],
+    empty_message: Option<&str>,
+    config: &ClientShellConfig,
+    agent_scroll: &mut usize,
+    hits: &mut ShellHitMap,
+    agent_row: impl Fn(&T) -> &AgentRow<'a>,
+    mut agent_hits: impl FnMut(&mut Buffer, Rect, &T, &mut ShellHitMap),
+) {
+    let grouped = entries
+        .iter()
+        .any(|entry| matches!(entry, AgentPanelEntry::Group(_)));
+    render_agent_list(
+        buffer,
+        area,
+        entries,
+        empty_message,
+        config,
+        agent_scroll,
+        hits,
+        |entry| entry.lines(|agent| agent_row(agent).rows.len()),
+        |buffer, rect, entry, hits| match entry {
+            AgentPanelEntry::Group(header) => {
+                // The header takes the last line; a spacer line may sit above it.
+                let line = Rect::new(rect.x, rect.bottom().saturating_sub(1), rect.width, 1);
+                hits.agent_groups.push((
+                    line,
+                    header.endpoint_id.clone(),
+                    header.workspace_id.clone(),
+                ));
+                render_agent_group(buffer, line, header, config);
+            }
+            AgentPanelEntry::Agent(agent) => {
+                let indent = if grouped { 2 } else { 0 };
+                render_agent_row(buffer, rect, agent_row(agent), config, indent);
+                agent_hits(buffer, rect, agent, hits);
+            }
+        },
+    );
+}
+
+/// Keeps every agent but the later agents of a folded workspace, so a folded workspace
+/// is one navigation stop: its first agent, which switches to that workspace.
+pub(super) fn navigation_stops<T>(
+    agents: Vec<T>,
+    folded: impl Fn(&T) -> bool,
+    same_workspace: impl Fn(&T, &T) -> bool,
+) -> Vec<T> {
+    let mut stops: Vec<T> = Vec::new();
+    for agent in agents {
+        if folded(&agent) && stops.iter().any(|stop| same_workspace(stop, &agent)) {
+            continue;
+        }
+        stops.push(agent);
+    }
+    stops
+}
+
+/// Navigation stops of one machine's panel in panel order, as (pane, workspace).
 pub(super) fn agent_navigation_stops(
     snapshot: &ClientShellSnapshot,
     sort: crate::config::AgentPanelSortConfig,
-    collapsed: &HashSet<String>,
+    folded: Option<&HashSet<String>>,
 ) -> Vec<(String, String)> {
-    let mut stops: Vec<(String, String)> = Vec::new();
-    for pane_id in ordered_agent_pane_ids(snapshot, sort) {
-        let Some(agent) = snapshot
-            .agents
-            .iter()
-            .find(|agent| agent.pane_id == pane_id)
-        else {
-            continue;
-        };
-        let folds = sort == crate::config::AgentPanelSortConfig::Spaces
-            && snapshot.agent_view_label.is_none()
-            && collapsed.contains(&agent.workspace_id);
-        if folds
-            && stops
+    let grouped = groups_agents(sort, snapshot.agent_view_label.as_deref());
+    let agents = ordered_agent_pane_ids(snapshot, sort)
+        .into_iter()
+        .filter_map(|pane_id| {
+            let agent = snapshot
+                .agents
                 .iter()
-                .any(|(_, workspace)| workspace == &agent.workspace_id)
-        {
-            continue;
-        }
-        stops.push((pane_id, agent.workspace_id.clone()));
-    }
-    stops
+                .find(|agent| agent.pane_id == pane_id)?;
+            Some((pane_id, agent.workspace_id.clone()))
+        })
+        .collect();
+    navigation_stops(
+        agents,
+        |(_, workspace_id)| grouped && folded.is_some_and(|folded| folded.contains(workspace_id)),
+        |(_, left), (_, right)| left == right,
+    )
 }
 
 fn render_agent_group(

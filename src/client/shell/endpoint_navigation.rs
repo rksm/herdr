@@ -170,11 +170,7 @@ impl ClientShellState {
             action,
             KeybindAction::PreviousAgent | KeybindAction::NextAgent | KeybindAction::FocusAgent(_)
         ) {
-            let agents = super::aggregate_navigation::online_agent_targets(
-                &self.endpoints,
-                &self.active_endpoint_id,
-                self.config.agent_panel_sort,
-            );
+            let agents = self.agent_navigation_targets();
             if agents.is_empty() {
                 return true;
             }
@@ -186,13 +182,24 @@ impl ClientShellState {
                     index
                 }
                 KeybindAction::PreviousAgent | KeybindAction::NextAgent => {
-                    let focused = self
-                        .snapshot
-                        .as_deref()
-                        .and_then(|snapshot| snapshot.focused_pane_id.as_deref());
+                    let snapshot = self.snapshot.as_deref();
+                    let focused = snapshot.and_then(|snapshot| snapshot.focused_pane_id.as_deref());
+                    let focused_workspace = snapshot.and_then(|snapshot| {
+                        snapshot
+                            .agents
+                            .iter()
+                            .find(|agent| Some(agent.pane_id.as_str()) == focused)
+                            .map(|agent| agent.workspace_id.as_str())
+                    });
+                    // A focused agent hidden in a folded workspace counts as that workspace's stop.
                     let current = agents.iter().position(|target| {
                         target.endpoint_id == self.active_endpoint_id
-                            && Some(target.pane_id.as_str()) == focused
+                            && (Some(target.pane_id.as_str()) == focused
+                                || (super::agent_sidebar::agent_workspace_folded(
+                                    &self.collapsed_agent_workspaces,
+                                    &target.endpoint_id,
+                                    &target.workspace_id,
+                                ) && Some(target.workspace_id.as_str()) == focused_workspace))
                     });
                     match (current, action) {
                         (Some(index), KeybindAction::PreviousAgent) => {
@@ -226,6 +233,36 @@ impl ClientShellState {
             return true;
         }
         false
+    }
+
+    /// Online agents in panel order, with one stop per folded workspace.
+    pub(super) fn agent_navigation_targets(
+        &self,
+    ) -> Vec<super::aggregate_navigation::AggregateAgentTarget> {
+        let grouped = super::agent_sidebar::groups_agents(
+            self.config.agent_panel_sort,
+            self.snapshot
+                .as_deref()
+                .and_then(|snapshot| snapshot.agent_view_label.as_deref()),
+        );
+        super::agent_sidebar::navigation_stops(
+            super::aggregate_navigation::online_agent_targets(
+                &self.endpoints,
+                &self.active_endpoint_id,
+                self.config.agent_panel_sort,
+            ),
+            |target| {
+                grouped
+                    && super::agent_sidebar::agent_workspace_folded(
+                        &self.collapsed_agent_workspaces,
+                        &target.endpoint_id,
+                        &target.workspace_id,
+                    )
+            },
+            |left, right| {
+                left.endpoint_id == right.endpoint_id && left.workspace_id == right.workspace_id
+            },
+        )
     }
 
     /// Selecting a machine that is waiting to reconnect asks for an attempt now.
