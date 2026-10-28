@@ -1555,6 +1555,40 @@ fn navigator_scrollbar_click_and_drag_scroll_without_opening_a_destination() {
 }
 
 #[test]
+fn navigator_ctrl_n_p_move_like_down_and_up_outside_search() {
+    let mut projected = snapshot();
+    for index in 2..=3 {
+        let mut pane = projected.panes[0].clone();
+        pane.pane_id = format!("pane_{index}");
+        pane.focused = false;
+        projected.panes.push(pane);
+    }
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(projected));
+    state.open_navigator_overlay();
+    let selected = |state: &ClientShellState| match &state.overlay {
+        Some(ClientShellOverlay::Navigator(navigator)) => navigator.selected.clone(),
+        _ => panic!("navigator"),
+    };
+    let press = |state: &mut ClientShellState, code, modifiers| {
+        state.handle_raw_events(vec![RawInputEvent::Key(crate::input::TerminalKey::new(
+            code, modifiers,
+        ))]);
+    };
+
+    let start = selected(&state);
+    press(&mut state, KeyCode::Down, KeyModifiers::empty());
+    let below = selected(&state);
+    assert_ne!(below, start);
+    press(&mut state, KeyCode::Up, KeyModifiers::empty());
+    assert_eq!(selected(&state), start);
+    press(&mut state, KeyCode::Char('n'), KeyModifiers::CONTROL);
+    assert_eq!(selected(&state), below);
+    press(&mut state, KeyCode::Char('p'), KeyModifiers::CONTROL);
+    assert_eq!(selected(&state), start);
+}
+
+#[test]
 fn navigator_page_keys_scroll_a_page_and_keep_the_selection_row() {
     let mut projected = snapshot();
     for index in 2..=60 {
