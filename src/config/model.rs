@@ -463,6 +463,8 @@ pub struct KeysConfig {
     pub toggle_agent_sort: BindingConfig,
     /// Fold or unfold the focused workspace's agent group. Default: "prefix+f"
     pub toggle_agent_group: BindingConfig,
+    /// Fold every workspace agent group, or unfold all when all are folded. Default: "prefix+shift+f"
+    pub toggle_all_agent_groups: BindingConfig,
     /// Optional indexed shortcuts expanded over number keys 1-9.
     pub indexed: IndexedKeysConfig,
     /// Prefix-mode custom command bindings.
@@ -608,6 +610,8 @@ pub(crate) struct KeysConfigOverlay {
     #[serde(skip_serializing_if = "Option::is_none")]
     toggle_agent_group: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    toggle_all_agent_groups: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     indexed: Option<IndexedKeysConfig>,
     #[serde(skip_serializing)]
     command: Option<Vec<CommandKeybindConfig>>,
@@ -723,6 +727,7 @@ impl<'de> Deserialize<'de> for KeysConfig {
         apply_field!(toggle_sidebar);
         apply_field!(toggle_agent_sort);
         apply_field!(toggle_agent_group);
+        apply_field!(toggle_all_agent_groups);
         apply_field!(indexed);
         apply_field!(command);
 
@@ -832,6 +837,7 @@ impl KeysConfig {
         copy_effective_action_field!(toggle_sidebar, keybinds.toggle_sidebar);
         copy_effective_action_field!(toggle_agent_sort, keybinds.toggle_agent_sort);
         copy_effective_action_field!(toggle_agent_group, keybinds.toggle_agent_group);
+        copy_effective_action_field!(toggle_all_agent_groups, keybinds.toggle_all_agent_groups);
         copy_user_field!(indexed);
 
         profile
@@ -1220,6 +1226,7 @@ impl Default for KeysConfig {
             toggle_sidebar: BindingConfig::one("prefix+b"),
             toggle_agent_sort: BindingConfig::one("prefix+shift+a"),
             toggle_agent_group: BindingConfig::one("prefix+f"),
+            toggle_all_agent_groups: BindingConfig::one("prefix+shift+f"),
             indexed: IndexedKeysConfig::default(),
             command: Vec::new(),
             user_fields: BTreeSet::new(),

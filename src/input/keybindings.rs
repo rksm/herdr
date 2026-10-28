@@ -65,6 +65,7 @@ pub(crate) enum KeybindAction {
     ToggleSidebar,
     ToggleAgentSort,
     ToggleAgentGroup,
+    ToggleAllAgentGroups,
     CyclePaneNext,
     CyclePanePrevious,
     LastPane,
@@ -157,6 +158,10 @@ pub(crate) fn resolve_non_indexed_action(
         (
             &keybinds.toggle_agent_group,
             KeybindAction::ToggleAgentGroup,
+        ),
+        (
+            &keybinds.toggle_all_agent_groups,
+            KeybindAction::ToggleAllAgentGroups,
         ),
         (&keybinds.reload_config, KeybindAction::ReloadConfig),
         (

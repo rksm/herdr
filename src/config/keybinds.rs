@@ -407,6 +407,7 @@ pub struct Keybinds {
     pub toggle_sidebar: ActionKeybinds,
     pub toggle_agent_sort: ActionKeybinds,
     pub toggle_agent_group: ActionKeybinds,
+    pub toggle_all_agent_groups: ActionKeybinds,
     pub custom_commands: Vec<CustomCommandKeybind>,
 }
 
@@ -594,6 +595,7 @@ impl Config {
             toggle_sidebar: empty_action!(),
             toggle_agent_sort: empty_action!(),
             toggle_agent_group: empty_action!(),
+            toggle_all_agent_groups: empty_action!(),
             custom_commands: Vec::new(),
         };
 
@@ -746,6 +748,11 @@ impl Config {
             apply_action!(keybinds.toggle_sidebar, toggle_sidebar, source);
             apply_action!(keybinds.toggle_agent_sort, toggle_agent_sort, source);
             apply_action!(keybinds.toggle_agent_group, toggle_agent_group, source);
+            apply_action!(
+                keybinds.toggle_all_agent_groups,
+                toggle_all_agent_groups,
+                source
+            );
 
             if source == field_source!(indexed) {
                 append_legacy_indexed_bindings(

@@ -1536,6 +1536,40 @@ fn grouped_agent_panel_puts_headers_at_workspace_and_machine_boundaries() {
 }
 
 #[test]
+fn fold_all_folds_every_machine_workspace_then_unfolds_them() {
+    let (mut state, remote) =
+        two_machines_sharing_a_workspace_id(ClientShellConfig::from_config(&Config::default()));
+    let folded = |state: &ClientShellState| {
+        [
+            (ClientEndpointId::Local, "ws_1"),
+            (ClientEndpointId::Local, "ws_2"),
+            (remote.clone(), "ws_2"),
+        ]
+        .map(|(endpoint_id, workspace_id)| {
+            super::super::agent_sidebar::agent_workspace_folded(
+                &state.collapsed_agent_workspaces,
+                &endpoint_id,
+                workspace_id,
+            )
+        })
+    };
+
+    // With some workspaces folded, prefix+shift+f folds the rest.
+    state.toggle_collapsed_agent_workspace(remote.clone(), "ws_2".into());
+    state.handle_input_bytes(b"\x02F");
+    assert_eq!(folded(&state), [true; 3]);
+    state.compose(106, 40).expect("folded agent headers");
+    assert!(state.hits.endpoint_agents.is_empty());
+    assert_eq!(state.hits.agent_groups.len(), 3);
+
+    // With every workspace folded, it unfolds them all.
+    state.handle_input_bytes(b"\x02F");
+    assert_eq!(folded(&state), [false; 3]);
+    state.compose(106, 40).expect("unfolded agent headers");
+    assert_eq!(state.hits.endpoint_agents.len(), 5);
+}
+
+#[test]
 fn multi_machine_agent_folds_belong_to_one_machine_and_persist() {
     let path = std::env::temp_dir().join(format!(
         "herdr-shell-agent-folds-{}-{}.json",

@@ -1192,6 +1192,39 @@ impl ClientShellState {
         }
     }
 
+    /// Folds the workspace of every agent on every machine, or unfolds all folds when
+    /// every one of them is already folded.
+    pub(super) fn toggle_all_agent_workspaces(&mut self) {
+        let workspaces = self
+            .endpoints
+            .iter()
+            .filter_map(|endpoint| Some((&endpoint.endpoint_id, endpoint.snapshot.as_deref()?)))
+            .flat_map(|(endpoint_id, snapshot)| {
+                snapshot
+                    .agents
+                    .iter()
+                    .map(move |agent| (endpoint_id.clone(), agent.workspace_id.clone()))
+            })
+            .collect::<Vec<_>>();
+        let all_folded = workspaces.iter().all(|(endpoint_id, workspace_id)| {
+            super::agent_sidebar::agent_workspace_folded(
+                &self.collapsed_agent_workspaces,
+                endpoint_id,
+                workspace_id,
+            )
+        });
+        if all_folded {
+            self.collapsed_agent_workspaces.clear();
+            return;
+        }
+        for (endpoint_id, workspace_id) in workspaces {
+            self.collapsed_agent_workspaces
+                .entry(endpoint_id)
+                .or_default()
+                .insert(workspace_id);
+        }
+    }
+
     pub(super) fn toggle_collapsed_group(&mut self, endpoint_id: &ClientEndpointId, key: String) {
         let groups = if endpoint_id.is_local() {
             &mut self.collapsed_groups
