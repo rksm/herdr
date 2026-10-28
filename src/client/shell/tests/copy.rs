@@ -1389,6 +1389,14 @@ fn navigator_horizontal_arrows_jump_sections_but_edit_the_search_cursor() {
     press(&mut state, KeyCode::Left);
     press(&mut state, KeyCode::Right);
     assert_eq!(selected(&state), target("pane_1"));
+    // Ctrl+Up/Down jump sections while searching and leave the text cursor alone.
+    for (code, id) in [(KeyCode::Down, "pane_last"), (KeyCode::Up, "pane_1")] {
+        state.handle_raw_events(vec![RawInputEvent::Key(crate::input::TerminalKey::new(
+            code,
+            KeyModifiers::CONTROL,
+        ))]);
+        assert_eq!(selected(&state), target(id));
+    }
     press(&mut state, KeyCode::Left);
     press(&mut state, KeyCode::Char('X'));
     let Some(ClientShellOverlay::Navigator(navigator)) = state.overlay.as_mut() else {
@@ -1544,6 +1552,65 @@ fn navigator_scrollbar_click_and_drag_scroll_without_opening_a_destination() {
     assert_eq!(state.hits.navigator_rows.len(), 2);
     state.compose(106, 90).expect("tall filtered navigator");
     assert!(state.hits.navigator_scrollbar.is_empty());
+}
+
+#[test]
+fn navigator_page_keys_scroll_a_page_and_keep_the_selection_row() {
+    let mut projected = snapshot();
+    for index in 2..=60 {
+        let mut pane = projected.panes[0].clone();
+        pane.pane_id = format!("pane_{index}");
+        pane.label = Some(format!("agent {index}"));
+        pane.focused = false;
+        projected.panes.push(pane);
+    }
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    state.open_navigator_overlay();
+    // Returns the scroll offset and the selection's row inside the viewport.
+    let view = |state: &mut ClientShellState| {
+        state.compose(106, 24).expect("navigator");
+        let Some(ClientShellOverlay::Navigator(navigator)) = &state.overlay else {
+            panic!("navigator");
+        };
+        let metrics = state.hits.navigator_scroll_metrics.expect("metrics");
+        let row = state
+            .hits
+            .navigator_rows
+            .iter()
+            .position(|(_, target)| navigator.selected.as_ref() == Some(target))
+            .expect("visible selection");
+        (
+            metrics.max_offset_from_bottom - metrics.offset_from_bottom,
+            row,
+        )
+    };
+    let press = |state: &mut ClientShellState, code| {
+        state.handle_raw_events(vec![RawInputEvent::Key(crate::input::TerminalKey::new(
+            code,
+            KeyModifiers::empty(),
+        ))]);
+    };
+    let (top, row) = view(&mut state);
+    let metrics = state.hits.navigator_scroll_metrics.expect("metrics");
+    press(&mut state, KeyCode::PageDown);
+    assert_eq!(view(&mut state), (top + metrics.viewport_rows, row));
+    press(&mut state, KeyCode::PageUp);
+    assert_eq!(view(&mut state), (top, row));
+    // Paging also works while the search field has focus.
+    press(&mut state, KeyCode::Char('/'));
+    for _ in 0..10 {
+        press(&mut state, KeyCode::PageDown);
+    }
+    assert_eq!(
+        view(&mut state),
+        (metrics.max_offset_from_bottom, metrics.viewport_rows - 1)
+    );
+    for _ in 0..10 {
+        press(&mut state, KeyCode::PageUp);
+    }
+    assert_eq!(view(&mut state), (0, 0));
 }
 
 #[test]

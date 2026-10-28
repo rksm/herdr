@@ -502,6 +502,20 @@ pub(super) fn navigator_selected_index(
     }
 }
 
+/// The first visible row: the stored scroll, moved just enough to show the selection.
+pub(super) fn navigator_scroll(
+    navigator: &ClientNavigatorOverlay,
+    selected: usize,
+    row_count: usize,
+    viewport_rows: usize,
+) -> usize {
+    navigator
+        .scroll
+        .max(selected.saturating_sub(viewport_rows.saturating_sub(1)))
+        .min(selected)
+        .min(row_count.saturating_sub(viewport_rows))
+}
+
 pub(super) fn selected_navigator_target(
     rows: &[ClientNavigatorRow],
     navigator: &ClientNavigatorOverlay,
