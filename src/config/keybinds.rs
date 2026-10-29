@@ -371,6 +371,9 @@ pub struct Keybinds {
     pub mark_agent_unread: ActionKeybinds,
     pub agent_history_back: ActionKeybinds,
     pub agent_history_forward: ActionKeybinds,
+    pub agent_history_save: ActionKeybinds,
+    pub agent_history_restore: ActionKeybinds,
+    pub agent_history_reset: ActionKeybinds,
     pub focus_agent: Vec<IndexedKeybind>,
     pub new_tab: ActionKeybinds,
     pub rename_tab: ActionKeybinds,
@@ -561,6 +564,9 @@ impl Config {
             mark_agent_unread: empty_action!(),
             agent_history_back: empty_action!(),
             agent_history_forward: empty_action!(),
+            agent_history_save: empty_action!(),
+            agent_history_restore: empty_action!(),
+            agent_history_reset: empty_action!(),
             focus_agent: Vec::new(),
             new_tab: empty_action!(),
             rename_tab: empty_action!(),
@@ -705,6 +711,13 @@ impl Config {
                 agent_history_forward,
                 source
             );
+            apply_action!(keybinds.agent_history_save, agent_history_save, source);
+            apply_action!(
+                keybinds.agent_history_restore,
+                agent_history_restore,
+                source
+            );
+            apply_action!(keybinds.agent_history_reset, agent_history_reset, source);
             apply_indexed!(
                 keybinds.focus_agent,
                 focus_agent,

@@ -389,6 +389,12 @@ pub struct KeysConfig {
     pub agent_history_back: BindingConfig,
     /// Focus the agent selected after the current one. Unset by default.
     pub agent_history_forward: BindingConfig,
+    /// Save the agent history of every machine in this window. Unset by default.
+    pub agent_history_save: BindingConfig,
+    /// Restore the saved agent history and focus its agent. Unset by default.
+    pub agent_history_restore: BindingConfig,
+    /// Clear the agent history of every machine in this window. Unset by default.
+    pub agent_history_reset: BindingConfig,
     /// Focus an agent by index 1-9. Unset by default.
     pub focus_agent: BindingConfig,
     /// Local-client shortcut that sends a clipboard image to a remote Herdr session. Default: "ctrl+v".
@@ -540,6 +546,12 @@ pub(crate) struct KeysConfigOverlay {
     agent_history_back: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     agent_history_forward: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    agent_history_save: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    agent_history_restore: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    agent_history_reset: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     focus_agent: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -698,6 +710,9 @@ impl<'de> Deserialize<'de> for KeysConfig {
         apply_field!(mark_agent_unread);
         apply_field!(agent_history_back);
         apply_field!(agent_history_forward);
+        apply_field!(agent_history_save);
+        apply_field!(agent_history_restore);
+        apply_field!(agent_history_reset);
         apply_field!(focus_agent);
         apply_field!(remote_image_paste);
         apply_field!(new_tab);
@@ -810,6 +825,9 @@ impl KeysConfig {
         copy_effective_action_field!(mark_agent_unread, keybinds.mark_agent_unread);
         copy_effective_action_field!(agent_history_back, keybinds.agent_history_back);
         copy_effective_action_field!(agent_history_forward, keybinds.agent_history_forward);
+        copy_effective_action_field!(agent_history_save, keybinds.agent_history_save);
+        copy_effective_action_field!(agent_history_restore, keybinds.agent_history_restore);
+        copy_effective_action_field!(agent_history_reset, keybinds.agent_history_reset);
         copy_effective_indexed_field!(focus_agent, keybinds.focus_agent);
         copy_user_field!(remote_image_paste);
         copy_effective_action_field!(new_tab, keybinds.new_tab);
@@ -1201,6 +1219,9 @@ impl Default for KeysConfig {
             mark_agent_unread: BindingConfig::one("prefix+u"),
             agent_history_back: BindingConfig::empty(),
             agent_history_forward: BindingConfig::empty(),
+            agent_history_save: BindingConfig::empty(),
+            agent_history_restore: BindingConfig::empty(),
+            agent_history_reset: BindingConfig::empty(),
             focus_agent: BindingConfig::empty(),
             remote_image_paste: "ctrl+v".into(),
             new_tab: BindingConfig::one("prefix+c"),

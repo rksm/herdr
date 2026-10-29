@@ -1610,6 +1610,67 @@ fn agent_history_keys_focus_earlier_agents_of_the_active_machine() {
 }
 
 #[test]
+fn restoring_the_agent_history_returns_to_the_saved_machine_and_agent() {
+    let config: Config = toml::from_str(
+        "[keys]\nagent_history_back = 'prefix+,'\nagent_history_save = 'prefix+y'\nagent_history_restore = 'prefix+t'\nagent_history_reset = 'prefix+i'",
+    )
+    .expect("agent history keys");
+    let (mut state, remote) =
+        two_machines_sharing_a_workspace_id(ClientShellConfig::from_config(&config));
+    let focus = |state: &mut ClientShellState, revision: u64, pane_id: &str| {
+        let mut local = state.snapshot.as_deref().expect("local snapshot").clone();
+        local.revision = revision;
+        local.focused_pane_id = Some(pane_id.into());
+        state.set_snapshot(Box::new(local));
+    };
+    let toast = |state: &ClientShellState| {
+        state
+            .copy_feedback
+            .as_ref()
+            .map(|feedback| feedback.message.clone())
+    };
+
+    state.handle_input_bytes(b"\x02t");
+    assert_eq!(toast(&state).as_deref(), Some("no saved agent history"));
+
+    // The local machine starts on pane_1; the user selects pane_2 and saves.
+    focus(&mut state, 2, "pane_2");
+    state.handle_input_bytes(b"\x02y");
+    assert_eq!(toast(&state).as_deref(), Some("agent history saved"));
+    focus(&mut state, 3, "pane_3");
+    assert!(state.activate_endpoint_projection(&remote));
+
+    let outcome = state.handle_input_bytes(b"\x02t");
+    assert!(matches!(
+        outcome.actions.as_slice(),
+        [ClientShellAction::ActivateEndpoint {
+            endpoint_id: ClientEndpointId::Local,
+            target: Some(ClientEndpointFocusTarget::Pane(pane_id)),
+        }] if pane_id == "pane_2"
+    ));
+    assert_eq!(toast(&state).as_deref(), Some("agent history restored"));
+
+    // The local history no longer holds pane_3, and back continues from pane_2.
+    assert!(state.activate_endpoint_projection(&ClientEndpointId::Local));
+    focus(&mut state, 4, "pane_2");
+    let outcome = state.handle_input_bytes(b"\x02,");
+    assert!(matches!(
+        outcome.actions.as_slice(),
+        [ClientShellAction::Endpoint { request, .. }]
+            if matches!(&request.method, crate::api::schema::Method::PaneFocus(target) if target.pane_id == "pane_1")
+    ));
+
+    state.handle_input_bytes(b"\x02i");
+    assert_eq!(toast(&state).as_deref(), Some("agent history reset"));
+    // Only pane_2 is left, so back has nothing to focus.
+    assert!(!state
+        .handle_input_bytes(b"\x02,")
+        .actions
+        .iter()
+        .any(|action| matches!(action, ClientShellAction::Endpoint { .. })));
+}
+
+#[test]
 fn multi_machine_agent_folds_belong_to_one_machine_and_persist() {
     let path = std::env::temp_dir().join(format!(
         "herdr-shell-agent-folds-{}-{}.json",

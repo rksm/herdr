@@ -644,6 +644,24 @@
           "description": "After going back in the agent history, focus the next agent again. Unset by default."
         },
         {
+          "key": "keys.agent_history_save",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Save the agent history of every machine in this client window. Saving again replaces the saved history. Unset by default."
+        },
+        {
+          "key": "keys.agent_history_restore",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Restore the saved agent history and focus the agent you were on when you saved it, switching back to its machine. Unset by default."
+        },
+        {
+          "key": "keys.agent_history_reset",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Clear the agent history of every machine in this client window, keeping only the focused agent. The saved history stays. Unset by default."
+        },
+        {
           "key": "keys.focus_agent",
           "type": "keybinding",
           "default": "unset",

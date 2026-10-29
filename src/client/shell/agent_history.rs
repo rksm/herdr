@@ -1,12 +1,76 @@
-use crate::protocol::ClientShellSnapshot;
+use super::*;
 
 /// The number of agent selections one history keeps.
 const AGENT_HISTORY_LIMIT: usize = 50;
 
+/// The agent histories of every machine as the save key stored them.
+#[derive(Debug)]
+pub(super) struct SavedAgentHistory {
+    /// The machine that was active, which restore returns to.
+    active_endpoint_id: ClientEndpointId,
+    histories: HashMap<ClientEndpointId, AgentHistory>,
+}
+
+impl ClientShellState {
+    pub(super) fn save_agent_history(&mut self, outcome: &mut ClientShellInput) {
+        self.saved_agent_history = Some(SavedAgentHistory {
+            active_endpoint_id: self.active_endpoint_id.clone(),
+            histories: self.agent_history.clone(),
+        });
+        self.show_feedback("agent history saved", std::time::Instant::now());
+        outcome.repaint = true;
+    }
+
+    /// Starts every machine's history over from its focused agent. The saved
+    /// history stays.
+    pub(super) fn reset_agent_history(&mut self, outcome: &mut ClientShellInput) {
+        for history in self.agent_history.values_mut() {
+            history.reset();
+        }
+        self.show_feedback("agent history reset", std::time::Instant::now());
+        outcome.repaint = true;
+    }
+
+    /// Restores the saved history of every machine, then focuses the saved agent
+    /// of the machine that was active, switching to that machine if needed.
+    pub(super) fn restore_agent_history(&mut self, outcome: &mut ClientShellInput) {
+        outcome.repaint = true;
+        let Some(saved) = self.saved_agent_history.as_ref() else {
+            self.show_feedback("no saved agent history", std::time::Instant::now());
+            return;
+        };
+        for (endpoint_id, history) in &mut self.agent_history {
+            history.restore(saved.histories.get(endpoint_id));
+        }
+        let endpoint_id = saved.active_endpoint_id.clone();
+        let snapshot = if endpoint_id == self.active_endpoint_id {
+            self.snapshot.as_deref()
+        } else {
+            self.endpoints
+                .iter()
+                .find(|endpoint| endpoint.endpoint_id == endpoint_id)
+                .and_then(|endpoint| endpoint.snapshot.as_deref())
+        };
+        let pane_id = snapshot
+            .zip(self.agent_history.get_mut(&endpoint_id))
+            .and_then(|(snapshot, history)| history.step(snapshot, 0));
+        // lessismore: switching machines resets the projection, which hides this toast.
+        // Revisit when restore across machines needs visible confirmation.
+        self.show_feedback("agent history restored", std::time::Instant::now());
+        if let Some(pane_id) = pane_id {
+            self.focus_or_activate(
+                endpoint_id,
+                ClientEndpointFocusTarget::Pane(pane_id),
+                outcome,
+            );
+        }
+    }
+}
+
 /// Browser-style history of the agent panes one client window focused on one
 /// machine, oldest first. Back and forward move the cursor without adding entries;
 /// a new selection drops the entries after the cursor.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(super) struct AgentHistory {
     /// Pane ids are only meaningful within one server boot.
     boot_id: String,
@@ -55,9 +119,26 @@ impl AgentHistory {
         self.cursor = self.entries.len() - 1;
     }
 
+    /// Forgets every selection but the focused agent, as if the window just opened.
+    fn reset(&mut self) {
+        self.entries = self.focused_agent.iter().cloned().collect();
+        self.cursor = 0;
+        self.pending.clear();
+    }
+
+    /// Takes the entries and position of `saved` but keeps the focus this history
+    /// last observed, so the next snapshot is not mistaken for a selection. Saved
+    /// entries from an earlier server boot name panes that no longer exist.
+    fn restore(&mut self, saved: Option<&AgentHistory>) {
+        let saved = saved.filter(|saved| saved.boot_id == self.boot_id);
+        self.entries = saved.map(|saved| saved.entries.clone()).unwrap_or_default();
+        self.cursor = saved.map_or(0, |saved| saved.cursor);
+        self.pending.clear();
+    }
+
     /// Moves the cursor back (`delta` -1) or forward (1) and returns the pane to
-    /// focus. When focus is away from the cursor entry, for example on a shell, it
-    /// returns the cursor entry instead of moving.
+    /// focus; 0 returns the cursor entry. When focus is away from the cursor entry,
+    /// for example on a shell, it returns the cursor entry instead of moving.
     pub(super) fn step(&mut self, snapshot: &ClientShellSnapshot, delta: isize) -> Option<String> {
         self.forget_gone_agents(snapshot);
         let current = self.entries.get(self.cursor)?;
@@ -245,5 +326,45 @@ mod tests {
         restarted.boot_id = "boot-2".into();
         history.observe(&restarted);
         assert_eq!(entries(&history), (vec!["a3"], 0));
+    }
+
+    #[test]
+    fn reset_keeps_only_the_focused_agent() {
+        let mut history = AgentHistory::default();
+        for pane_id in ["a1", "a2", "a3"] {
+            select(&mut history, pane_id);
+        }
+        step(&mut history, "a3", -1);
+        history.reset();
+        assert_eq!(entries(&history), (vec!["a2"], 0));
+        select(&mut history, "a4");
+        assert_eq!(step(&mut history, "a4", -1).as_deref(), Some("a2"));
+    }
+
+    #[test]
+    fn restore_returns_to_the_saved_entries_and_position_of_the_same_boot() {
+        let mut history = AgentHistory::default();
+        for pane_id in ["a1", "a2", "a3"] {
+            select(&mut history, pane_id);
+        }
+        step(&mut history, "a3", -1);
+        let saved = history.clone();
+        select(&mut history, "a4");
+        assert_eq!(entries(&history), (vec!["a1", "a2", "a4"], 2));
+
+        history.restore(Some(&saved));
+        assert_eq!(entries(&history), (vec!["a1", "a2", "a3"], 1));
+        let target = history.step(&snapshot(AGENTS, "a4"), 0);
+        assert_eq!(target.as_deref(), Some("a2"));
+        // Neither the focus that a4 still has nor the restored focus is a selection.
+        history.observe(&snapshot(AGENTS, "a4"));
+        history.observe(&snapshot(AGENTS, "a2"));
+        assert_eq!(entries(&history), (vec!["a1", "a2", "a3"], 1));
+
+        let mut restarted = snapshot(AGENTS, "a1");
+        restarted.boot_id = "boot-2".into();
+        history.observe(&restarted);
+        history.restore(Some(&saved));
+        assert_eq!(entries(&history), (vec![], 0));
     }
 }

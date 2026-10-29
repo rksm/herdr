@@ -117,6 +117,17 @@ impl ClientShellState {
                 outcome.repaint = true;
                 self.persist_chrome_preferences(outcome);
             }
+            crate::input::KeybindMatch::Action(crate::input::KeybindAction::AgentHistorySave) => {
+                self.save_agent_history(outcome);
+            }
+            crate::input::KeybindMatch::Action(
+                crate::input::KeybindAction::AgentHistoryRestore,
+            ) => {
+                self.restore_agent_history(outcome);
+            }
+            crate::input::KeybindMatch::Action(crate::input::KeybindAction::AgentHistoryReset) => {
+                self.reset_agent_history(outcome);
+            }
             crate::input::KeybindMatch::Action(action) => {
                 if self.workspace_preview_action_blocked()
                     && matches!(
