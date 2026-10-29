@@ -916,6 +916,7 @@ pub(crate) struct ClientShellState {
     pub(super) previous_pane_id: Option<String>,
     /// Agents this window focused, one history per machine.
     pub(super) agent_history: HashMap<ClientEndpointId, super::agent_history::AgentHistory>,
+    pub(super) saved_agent_history: Option<super::agent_history::SavedAgentHistory>,
     pub(super) pane_mouse_gesture: Option<ClientPaneMouseGesture>,
     pub(super) link_hover: Option<super::link_hover::LinkHover>,
     pub(super) url_click_consumes_until_up: bool,
@@ -1090,6 +1091,7 @@ impl ClientShellState {
             overlay,
             previous_pane_id: None,
             agent_history: HashMap::new(),
+            saved_agent_history: None,
             pane_mouse_gesture: None,
             link_hover: None,
             url_click_consumes_until_up: false,
@@ -1886,11 +1888,16 @@ impl ClientShellState {
         if !self.config.clipboard_toast_enabled {
             return false;
         }
+        self.show_feedback("copied to clipboard", now);
+        true
+    }
+
+    /// Shows `message` briefly in the toast that confirms copies.
+    pub(super) fn show_feedback(&mut self, message: &str, now: std::time::Instant) {
         self.copy_feedback = Some(crate::app::state::CopyFeedback {
-            message: "copied to clipboard".to_owned(),
+            message: message.to_owned(),
         });
         self.copy_feedback_deadline = Some(now + std::time::Duration::from_secs(2));
-        true
     }
 
     pub(crate) fn tick_copy_feedback(&mut self, now: std::time::Instant) -> bool {
