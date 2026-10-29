@@ -1137,6 +1137,12 @@
           "description": "Blank terminal rows between expanded Agent sidebar entries. Set to 1 to restore the previous spacing."
         },
         {
+          "key": "ui.sidebar.agents.group_gap",
+          "type": "integer",
+          "default": "1",
+          "description": "Blank terminal rows above each workspace header after the first when the Agent sidebar groups agents by space. Set to 0 to stack the headers without spacing."
+        },
+        {
           "key": "ui.sidebar.agents.rows",
           "type": "list of token rows",
           "default": "[[\"state_icon\", \"machine\", \"workspace\", \"tab\"], [\"agent\"]]",

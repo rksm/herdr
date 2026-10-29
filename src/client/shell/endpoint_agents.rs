@@ -145,7 +145,7 @@ impl ClientShellState {
             .iter()
             .map(|entry| {
                 entry
-                    .lines(|row| row.agent.rows.len())
+                    .lines(self.config.agents.group_gap, |row| row.agent.rows.len())
                     .max(1)
                     .min(u16::MAX as usize) as u16
             })

@@ -1536,6 +1536,34 @@ fn grouped_agent_panel_puts_headers_at_workspace_and_machine_boundaries() {
 }
 
 #[test]
+fn group_gap_sets_the_blank_rows_above_later_workspace_headers() {
+    for (group_gap, expected) in [(None, 1), (Some(0), 0), (Some(2), 2)] {
+        let mut config = Config::default();
+        if let Some(group_gap) = group_gap {
+            config.ui.sidebar.agents.group_gap = group_gap;
+        }
+        let (state, _) =
+            two_machines_sharing_a_workspace_id(ClientShellConfig::from_config(&config));
+        let local = state.snapshot.as_deref().unwrap().clone();
+        let area = Rect::new(0, 0, 30, 16);
+        let mut hits = ShellHitMap::default();
+        super::super::agent_sidebar::render_agent_panel(
+            &mut Buffer::empty(area),
+            area,
+            &local,
+            &ClientEndpointId::Local,
+            &state.config,
+            &HashMap::new(),
+            &mut 0,
+            &mut hits,
+        );
+        // The second header sits after the first workspace's last agent.
+        let gap = hits.agent_groups[1].0.y - hits.agents[1].0.bottom();
+        assert_eq!(gap, expected, "group_gap {group_gap:?}");
+    }
+}
+
+#[test]
 fn fold_all_folds_every_machine_workspace_then_unfolds_them() {
     let (mut state, remote) =
         two_machines_sharing_a_workspace_id(ClientShellConfig::from_config(&Config::default()));
