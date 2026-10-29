@@ -129,10 +129,11 @@ pub(super) enum AgentPanelEntry<T> {
 }
 
 impl<T> AgentPanelEntry<T> {
-    /// Groups after the first carry one blank spacer line above the header.
-    pub(super) fn lines(&self, agent_lines: impl Fn(&T) -> usize) -> usize {
+    /// Groups after the first carry `group_gap` blank spacer lines above the header.
+    pub(super) fn lines(&self, group_gap: u16, agent_lines: impl Fn(&T) -> usize) -> usize {
         match self {
-            Self::Group(header) => 1 + usize::from(!header.first),
+            Self::Group(header) if header.first => 1,
+            Self::Group(_) => 1 + usize::from(group_gap),
             Self::Agent(agent) => agent_lines(agent),
         }
     }
@@ -245,7 +246,7 @@ pub(super) fn render_agent_entries<'a, T>(
         config,
         agent_scroll,
         hits,
-        |entry| entry.lines(|agent| agent_row(agent).rows.len()),
+        |entry| entry.lines(config.agents.group_gap, |agent| agent_row(agent).rows.len()),
         |buffer, rect, entry, hits| match entry {
             AgentPanelEntry::Group(header) => {
                 // The header takes the last line; a spacer line may sit above it.
