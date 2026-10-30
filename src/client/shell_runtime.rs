@@ -33,10 +33,11 @@ pub(super) fn dispatch_client_shell_actions(
                     repaint |= shell.cancel_endpoint_request(&request.id);
                 }
             }
-            shell::ClientShellAction::ClipboardWrite(bytes) => {
+            shell::ClientShellAction::ClipboardWrite { bytes, toast } => {
                 if crate::selection::write_osc52_bytes(&bytes) {
                     if let Some(shell) = shell.as_deref_mut() {
-                        repaint |= shell.show_copy_feedback(std::time::Instant::now());
+                        repaint |=
+                            shell.show_copy_feedback(toast.as_deref(), std::time::Instant::now());
                     }
                 }
             }

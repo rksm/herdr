@@ -758,6 +758,12 @@
           "description": "Enter keyboard copy mode for the focused pane."
         },
         {
+          "key": "keys.copy_pane_ids",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Copy the IDs of the focused workspace, tab and pane to the clipboard as JSON, along with the workspace and tab names. The ID keys are the names of the matching HERDR_WORKSPACE_ID, HERDR_TAB_ID and HERDR_PANE_ID environment variables. The clipboard toast shows the copied JSON. Unset by default."
+        },
+        {
           "key": "keys.focus_pane_left",
           "type": "keybinding",
           "default": "\"prefix+h\"",

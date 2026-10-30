@@ -409,7 +409,7 @@ fn client_double_click_selects_word_and_copies_only_after_release() {
             );
             let copied = word_row_reply(&mut state, &word_read_id(&actions), "bravo");
             assert!(
-                matches!(&copied[..], [ClientShellAction::ClipboardWrite(bytes)] if bytes == b"bravo")
+                matches!(&copied[..], [ClientShellAction::ClipboardWrite { bytes, .. }] if bytes == b"bravo")
             );
             assert!(state.tick_copy_feedback(state.selection_highlight_clear_deadline.unwrap()));
             assert!(state.selection.is_none());
@@ -576,7 +576,7 @@ fn double_click_drag_waits_for_latest_row_before_copying() {
             "bravo charlie\ndelta echo foxtrot\ngolf hotel",
         );
         assert!(
-            matches!(&copied[..], [ClientShellAction::ClipboardWrite(bytes)]
+            matches!(&copied[..], [ClientShellAction::ClipboardWrite { bytes, .. }]
             if bytes == b"bravo charlie\ndelta echo foxtrot\ngolf hotel")
         );
     }

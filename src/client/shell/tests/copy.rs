@@ -209,7 +209,7 @@ fn client_mouse_selection_highlights_and_copies_through_endpoint_extraction() {
     assert!(!repaint);
     assert!(matches!(
         &actions[..],
-        [ClientShellAction::ClipboardWrite(bytes)] if bytes == b"LIV"
+        [ClientShellAction::ClipboardWrite { bytes, .. }] if bytes == b"LIV"
     ));
     assert!(
         state.copy_feedback.is_none(),
@@ -221,7 +221,7 @@ fn client_mouse_selection_highlights_and_copies_through_endpoint_extraction() {
 fn clipboard_feedback_is_client_local_and_respects_config() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     let now = std::time::Instant::now();
-    assert!(state.show_copy_feedback(now));
+    assert!(state.show_copy_feedback(None, now));
     assert_eq!(
         state
             .copy_feedback
@@ -237,9 +237,27 @@ fn clipboard_feedback_is_client_local_and_respects_config() {
     state.config.clipboard_toast_enabled = false;
     state.copy_feedback = None;
     state.copy_feedback_deadline = None;
-    assert!(!state.show_copy_feedback(now));
+    assert!(!state.show_copy_feedback(None, now));
     assert!(state.copy_feedback.is_none());
     assert!(state.copy_feedback_deadline.is_none());
+}
+
+#[test]
+fn copy_pane_ids_key_copies_the_focused_ids_and_names_as_json_for_the_toast() {
+    let config: Config =
+        toml::from_str("[keys]\ncopy_pane_ids = 'prefix+y'").expect("copy pane ids key");
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    let mut projected = snapshot();
+    projected.tabs[0].label = r#"notes "draft""#.into();
+    state.set_snapshot(Box::new(projected));
+
+    let outcome = state.handle_input_bytes(b"\x02y");
+    let json = r#"{"$HERDR_WORKSPACE_ID": "ws_1", "workspace_name": "client-shell", "$HERDR_TAB_ID": "tab_1", "tab_name": "notes \"draft\"", "$HERDR_PANE_ID": "pane_1"}"#;
+    assert!(matches!(
+        outcome.actions.as_slice(),
+        [ClientShellAction::ClipboardWrite { bytes, toast: Some(toast) }]
+            if bytes == json.as_bytes() && toast == json
+    ));
 }
 
 #[test]
@@ -341,7 +359,9 @@ fn retained_mouse_selection_survives_output_and_copies_without_terminal_input() 
             text: "yIV".into(),
         }),
     );
-    assert!(matches!(&actions[..], [ClientShellAction::ClipboardWrite(bytes)] if bytes == b"yIV"));
+    assert!(
+        matches!(&actions[..], [ClientShellAction::ClipboardWrite { bytes, .. }] if bytes == b"yIV")
+    );
 }
 
 #[test]

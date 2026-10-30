@@ -247,7 +247,11 @@ pub(crate) enum ClientShellAction {
         boot_id: String,
         request: Box<crate::api::schema::Request>,
     },
-    ClipboardWrite(Vec<u8>),
+    ClipboardWrite {
+        bytes: Vec<u8>,
+        /// The toast message after the copy. `None` shows "copied to clipboard".
+        toast: Option<String>,
+    },
     OpenSafeWebUrl(String),
     ActivateEndpoint {
         endpoint_id: ClientEndpointId,
@@ -1884,11 +1888,15 @@ impl ClientShellState {
         }
     }
 
-    pub(crate) fn show_copy_feedback(&mut self, now: std::time::Instant) -> bool {
+    pub(crate) fn show_copy_feedback(
+        &mut self,
+        message: Option<&str>,
+        now: std::time::Instant,
+    ) -> bool {
         if !self.config.clipboard_toast_enabled {
             return false;
         }
-        self.show_feedback("copied to clipboard", now);
+        self.show_feedback(message.unwrap_or("copied to clipboard"), now);
         true
     }
 
