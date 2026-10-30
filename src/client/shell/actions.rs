@@ -128,6 +128,29 @@ impl ClientShellState {
             crate::input::KeybindMatch::Action(crate::input::KeybindAction::AgentHistoryReset) => {
                 self.reset_agent_history(outcome);
             }
+            crate::input::KeybindMatch::Action(crate::input::KeybindAction::CopyHerdrInfo) => {
+                self.copy_focused_text(outcome, |workspace, tab, pane_id| {
+                    // The ID keys name the environment variables that hold these IDs inside a pane.
+                    format!(
+                        r#"{{"$HERDR_WORKSPACE_ID": {}, "workspace_name": {}, "$HERDR_TAB_ID": {}, "tab_name": {}, "$HERDR_PANE_ID": {}}}"#,
+                        serde_json::Value::from(workspace.workspace_id.as_str()),
+                        serde_json::Value::from(workspace.label.as_str()),
+                        serde_json::Value::from(tab.tab_id.as_str()),
+                        serde_json::Value::from(tab.label.as_str()),
+                        serde_json::Value::from(pane_id),
+                    )
+                });
+            }
+            crate::input::KeybindMatch::Action(crate::input::KeybindAction::CopyPaneId) => {
+                self.copy_focused_text(outcome, |_, _, pane_id| pane_id.to_owned());
+            }
+            crate::input::KeybindMatch::Action(
+                crate::input::KeybindAction::CopyWorkspaceAndTabName,
+            ) => {
+                self.copy_focused_text(outcome, |workspace, tab, _| {
+                    format!("{}:{}", workspace.label, tab.label)
+                });
+            }
             crate::input::KeybindMatch::Action(action) => {
                 if self.workspace_preview_action_blocked()
                     && matches!(
@@ -375,6 +398,35 @@ impl ClientShellState {
                 }
             }
         }
+    }
+
+    /// Copies text built from the focused workspace, tab and pane ID, and shows
+    /// that text in the clipboard toast.
+    fn copy_focused_text(
+        &self,
+        outcome: &mut ClientShellInput,
+        text: impl FnOnce(&ClientShellWorkspace, &ClientShellTab, &str) -> String,
+    ) {
+        let Some(snapshot) = self.snapshot.as_deref() else {
+            return;
+        };
+        let workspace = snapshot.workspaces.iter().find(|workspace| {
+            snapshot.focused_workspace_id.as_ref() == Some(&workspace.workspace_id)
+        });
+        let tab = snapshot
+            .tabs
+            .iter()
+            .find(|tab| snapshot.focused_tab_id.as_ref() == Some(&tab.tab_id));
+        let (Some(workspace), Some(tab), Some(pane_id)) =
+            (workspace, tab, snapshot.focused_pane_id.as_deref())
+        else {
+            return;
+        };
+        let text = text(workspace, tab, pane_id);
+        outcome.actions.push(ClientShellAction::ClipboardWrite {
+            bytes: text.clone().into_bytes(),
+            toast: Some(text),
+        });
     }
 
     pub(super) fn request_selection_copy(&mut self, outcome: &mut ClientShellInput, live: bool) {
@@ -749,7 +801,10 @@ impl ClientShellState {
                     {
                         (
                             false,
-                            vec![ClientShellAction::ClipboardWrite(text.into_bytes())],
+                            vec![ClientShellAction::ClipboardWrite {
+                                bytes: text.into_bytes(),
+                                toast: None,
+                            }],
                         )
                     }
                     Ok(crate::api::schema::ResponseResult::PaneSelection { .. }) => {

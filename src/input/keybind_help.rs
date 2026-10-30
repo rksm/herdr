@@ -197,6 +197,12 @@ pub(crate) fn keybind_help_groups(
                 entry(binding_label(&keybinds.edit_scrollback), "edit scrollback"),
                 entry(binding_label(&keybinds.clear_pane), "clear pane"),
                 entry(binding_label(&keybinds.copy_mode), "copy mode"),
+                entry(binding_label(&keybinds.copy_herdr_info), "copy herdr info"),
+                entry(binding_label(&keybinds.copy_pane_id), "copy pane id"),
+                entry(
+                    binding_label(&keybinds.copy_workspace_and_tab_name),
+                    "copy workspace and tab name",
+                ),
                 entry(binding_label(&keybinds.zoom), "zoom pane"),
                 entry(binding_label(&keybinds.resize_mode), "resize mode"),
                 entry(

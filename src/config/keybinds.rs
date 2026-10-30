@@ -389,6 +389,9 @@ pub struct Keybinds {
     pub edit_scrollback: ActionKeybinds,
     pub clear_pane: ActionKeybinds,
     pub copy_mode: ActionKeybinds,
+    pub copy_herdr_info: ActionKeybinds,
+    pub copy_pane_id: ActionKeybinds,
+    pub copy_workspace_and_tab_name: ActionKeybinds,
     pub focus_pane_left: ActionKeybinds,
     pub focus_pane_down: ActionKeybinds,
     pub focus_pane_up: ActionKeybinds,
@@ -582,6 +585,9 @@ impl Config {
             edit_scrollback: empty_action!(),
             clear_pane: empty_action!(),
             copy_mode: empty_action!(),
+            copy_herdr_info: empty_action!(),
+            copy_pane_id: empty_action!(),
+            copy_workspace_and_tab_name: empty_action!(),
             focus_pane_left: empty_action!(),
             focus_pane_down: empty_action!(),
             focus_pane_up: empty_action!(),
@@ -748,6 +754,13 @@ impl Config {
             apply_action!(keybinds.edit_scrollback, edit_scrollback, source);
             apply_action!(keybinds.clear_pane, clear_pane, source);
             apply_action!(keybinds.copy_mode, copy_mode, source);
+            apply_action!(keybinds.copy_herdr_info, copy_herdr_info, source);
+            apply_action!(keybinds.copy_pane_id, copy_pane_id, source);
+            apply_action!(
+                keybinds.copy_workspace_and_tab_name,
+                copy_workspace_and_tab_name,
+                source
+            );
             apply_action!(keybinds.focus_pane_left, focus_pane_left, source);
             apply_action!(keybinds.focus_pane_down, focus_pane_down, source);
             apply_action!(keybinds.focus_pane_up, focus_pane_up, source);
