@@ -289,6 +289,7 @@ impl HeadlessServer {
         matches!(
             method,
             Method::AgentFocus(_)
+                | Method::AgentReveal(_)
                 | Method::CommandInvoke(_)
                 | Method::LayoutSetSplitRatio(_)
                 | Method::PaneClose(_)
@@ -857,9 +858,12 @@ impl HeadlessServer {
             _ => None,
         };
         let agent_focus_target = match &msg.request.method {
-            api::schema::Method::AgentFocus(params) => Some(params.target.clone()),
+            api::schema::Method::AgentFocus(params) | api::schema::Method::AgentReveal(params) => {
+                Some(params.target.clone())
+            }
             _ => None,
         };
+        let reveal_requested = matches!(&msg.request.method, api::schema::Method::AgentReveal(_));
         let create_focus_requested = match &msg.request.method {
             api::schema::Method::WorkspaceCreate(params) => params.focus,
             api::schema::Method::TabCreate(params) => params.focus,
@@ -906,6 +910,21 @@ impl HeadlessServer {
             || pane_move_focus_succeeded;
         if public_focus_succeeded {
             self.focus_all_shell_clients_on_default_target();
+        }
+        // Clients showing this machine already follow the focus above. A client showing
+        // another machine switches to this one when it gets the reveal.
+        if let Some(api::schema::ResponseResult::AgentInfo { agent }) =
+            proxied_result.as_ref().filter(|_| reveal_requested)
+        {
+            let reveal = crate::protocol::endpoint::EndpointAgentReveal {
+                pane_id: agent.pane_id.clone(),
+            };
+            match crate::protocol::endpoint::agent_reveal_message(&reveal) {
+                Ok(message) => {
+                    self.send_to_client_shells(message);
+                }
+                Err(err) => warn!(err = %err, "failed to encode agent reveal"),
+            }
         }
         if reconcile
             || target_changed

@@ -3425,3 +3425,33 @@ fn navigator_foreign_workspace_heading_keeps_the_workspace_target() {
         }] if activated == &endpoint_id && workspace_id == "ws_1"
     ));
 }
+
+#[test]
+fn agent_reveal_switches_a_client_that_shows_another_machine() {
+    let (mut state, remote) = state_with_remote();
+    for (shown, revealing) in [
+        (ClientEndpointId::Local, remote.clone()),
+        (remote.clone(), ClientEndpointId::Local),
+    ] {
+        assert!(state.activate_endpoint_projection(&shown));
+        let outcome = state.receive_agent_reveal(&revealing, "w2:p3".into());
+        assert!(matches!(
+            outcome.actions.as_slice(),
+            [ClientShellAction::ActivateEndpoint {
+                endpoint_id,
+                target: Some(ClientEndpointFocusTarget::Pane(pane_id)),
+            }] if endpoint_id == &revealing && pane_id == "w2:p3"
+        ));
+    }
+}
+
+#[test]
+fn agent_reveal_leaves_a_client_alone_that_shows_the_machine() {
+    let (mut state, remote) = state_with_remote();
+    for shown in [ClientEndpointId::Local, remote] {
+        assert!(state.activate_endpoint_projection(&shown));
+        let outcome = state.receive_agent_reveal(&shown, "w2:p3".into());
+        assert!(outcome.actions.is_empty());
+        assert!(!outcome.repaint);
+    }
+}

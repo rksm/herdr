@@ -353,4 +353,23 @@ impl ClientShellState {
         }
         true
     }
+
+    /// A machine asked its clients to show one of its agents (`agent.reveal`).
+    /// That machine has already focused the agent, so a client that shows the
+    /// machine needs nothing more. A client that shows another machine switches.
+    pub(crate) fn receive_agent_reveal(
+        &mut self,
+        endpoint_id: &ClientEndpointId,
+        pane_id: String,
+    ) -> ClientShellInput {
+        let mut outcome = ClientShellInput::default();
+        if *endpoint_id != self.active_endpoint_id {
+            self.focus_or_activate(
+                endpoint_id.clone(),
+                ClientEndpointFocusTarget::Pane(pane_id),
+                &mut outcome,
+            );
+        }
+        outcome
+    }
 }

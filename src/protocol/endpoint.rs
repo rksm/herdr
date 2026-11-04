@@ -31,6 +31,14 @@ pub const AGENT_VIEW_PROJECTION_CAPABILITY: &str = "agent_view_projection";
 pub const AGENT_VIEW_PROJECTION_KIND: &str = "endpoint.agent-view.v1";
 pub const AGENT_COMPLETIONS_CAPABILITY: &str = "agent_completions";
 pub const AGENT_COMPLETIONS_KIND: &str = "endpoint.agent-completions.v1";
+/// Asks clients to show the server's machine with this agent, after `agent.reveal`.
+/// Older clients ignore the unknown control kind.
+pub const AGENT_REVEAL_KIND: &str = "endpoint.agent-reveal.v1";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EndpointAgentReveal {
+    pub pane_id: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EndpointAgentCompletions {
@@ -119,6 +127,13 @@ pub fn agent_completions_message(
     Ok(ServerMessage::EndpointControl {
         kind: AGENT_COMPLETIONS_KIND.into(),
         data: serde_json::to_string(projection)?,
+    })
+}
+
+pub fn agent_reveal_message(reveal: &EndpointAgentReveal) -> serde_json::Result<ServerMessage> {
+    Ok(ServerMessage::EndpointControl {
+        kind: AGENT_REVEAL_KIND.into(),
+        data: serde_json::to_string(reveal)?,
     })
 }
 

@@ -147,6 +147,7 @@ operations::define_operations! {
     PluginPaneFocus(PluginPaneFocusParams) => "plugin.pane.focus", true, false;
     PluginPaneClose(PluginPaneCloseParams) => "plugin.pane.close", true, false;
     AgentMarkUnread(AgentTarget) => "agent.mark_unread", true, true;
+    AgentReveal(AgentTarget) => "agent.reveal", true, false;
 }
 
 #[cfg(test)]

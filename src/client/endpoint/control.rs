@@ -10,6 +10,7 @@ pub(crate) enum EndpointControlMessage {
     HealthPong,
     AgentViewProjection(DecodedAgentViewProjection),
     AgentCompletions(crate::protocol::endpoint::EndpointAgentCompletions),
+    AgentReveal(crate::protocol::endpoint::EndpointAgentReveal),
     Snapshot(Box<crate::protocol::ClientShellSnapshot>),
     Ignored,
 }
@@ -24,6 +25,11 @@ pub(crate) fn decode_endpoint_control(
     if kind == crate::protocol::endpoint::AGENT_COMPLETIONS_KIND {
         return Ok(serde_json::from_str(data)
             .map(EndpointControlMessage::AgentCompletions)
+            .unwrap_or(EndpointControlMessage::Ignored));
+    }
+    if kind == crate::protocol::endpoint::AGENT_REVEAL_KIND {
+        return Ok(serde_json::from_str(data)
+            .map(EndpointControlMessage::AgentReveal)
             .unwrap_or(EndpointControlMessage::Ignored));
     }
     if kind == crate::protocol::endpoint::AGENT_VIEW_PROJECTION_KIND {
@@ -101,6 +107,28 @@ mod tests {
             panic!("expected completion projection");
         };
         assert_eq!(decoded, projection);
+        assert!(matches!(
+            decode_endpoint_control(&kind, "invalid").unwrap(),
+            EndpointControlMessage::Ignored
+        ));
+    }
+
+    #[test]
+    fn agent_reveal_control_round_trips_and_ignores_invalid_data() {
+        let reveal = crate::protocol::endpoint::EndpointAgentReveal {
+            pane_id: "w1:p2".into(),
+        };
+        let crate::protocol::ServerMessage::EndpointControl { kind, data } =
+            crate::protocol::endpoint::agent_reveal_message(&reveal).unwrap()
+        else {
+            panic!("expected optional control");
+        };
+        let EndpointControlMessage::AgentReveal(decoded) =
+            decode_endpoint_control(&kind, &data).unwrap()
+        else {
+            panic!("expected agent reveal");
+        };
+        assert_eq!(decoded, reveal);
         assert!(matches!(
             decode_endpoint_control(&kind, "invalid").unwrap(),
             EndpointControlMessage::Ignored

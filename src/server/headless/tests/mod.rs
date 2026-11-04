@@ -2743,6 +2743,78 @@ async fn public_agent_focus_replaces_a_diverged_client_shell_projection() {
 }
 
 #[tokio::test]
+async fn public_agent_reveal_asks_every_client_shell_to_show_the_agent() {
+    use crate::api::schema::{AgentTarget, Method};
+    use crate::protocol::endpoint::{EndpointAgentReveal, AGENT_REVEAL_KIND};
+
+    let mut server = test_headless_server();
+    let workspace = crate::workspace::Workspace::test_new("agents");
+    let pane = workspace.tabs[0].root_pane;
+    server.app.state.workspaces = vec![workspace];
+    server.app.state.ensure_test_terminals();
+    server.app.state.active = Some(0);
+    server.app.state.selected = 0;
+    server.app.state.mode = crate::app::Mode::Terminal;
+    let pane_id = server.app.public_pane_id(0, pane).unwrap();
+    let (showing_rx, _showing_render_rx) = connect_test_shell(&mut server, 9, 80, 23);
+    let (elsewhere_rx, _elsewhere_render_rx) = connect_test_shell(&mut server, 10, 80, 23);
+    // Client 10 shows another machine, so its surface here is inactive.
+    assert!(server.set_client_shell_surface_active(10, false).is_some());
+    server
+        .app
+        .event_tx
+        .try_send(AppEvent::AgentProcessDetected {
+            pane_id: pane,
+            agent: crate::detect::Agent::Claude,
+            observed_at: Instant::now(),
+        })
+        .unwrap();
+    let reveals = |receiver: &std::sync::mpsc::Receiver<Vec<u8>>| {
+        receiver
+            .try_iter()
+            .filter_map(|bytes| match read_server_message(bytes) {
+                ServerMessage::EndpointControl { kind, data } if kind == AGENT_REVEAL_KIND => {
+                    Some(serde_json::from_str::<EndpointAgentReveal>(&data).unwrap())
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let target = AgentTarget {
+        target: pane_id.clone(),
+    };
+    for (method, expected) in [
+        (Method::AgentFocus(target.clone()), vec![]),
+        (
+            Method::AgentReveal(target),
+            vec![EndpointAgentReveal {
+                pane_id: pane_id.clone(),
+            }],
+        ),
+    ] {
+        let (respond_to, response_rx) = std::sync::mpsc::channel();
+        server.handle_api_request_with_shutdown_check(crate::api::ApiRequestMessage {
+            request: crate::api::schema::Request {
+                id: "focus".into(),
+                method,
+            },
+            respond_to,
+            response_write_complete: None,
+        });
+        let response: crate::api::schema::SuccessResponse =
+            serde_json::from_str(&response_rx.recv().expect("focus response")).unwrap();
+        assert!(matches!(
+            response.result,
+            crate::api::schema::ResponseResult::AgentInfo { .. }
+        ));
+        assert_eq!(reveals(&showing_rx), expected);
+        assert_eq!(reveals(&elsewhere_rx), expected);
+    }
+    shutdown_test_runtimes(&mut server);
+}
+
+#[tokio::test]
 async fn public_api_focus_replaces_every_client_shell_projection() {
     let mut server = test_headless_server();
     let first = crate::workspace::Workspace::test_new("first");

@@ -1145,7 +1145,11 @@ impl App {
             Method::TabClose(target) => return self.handle_tab_close(request.id, target),
             Method::AgentList(_) => return self.handle_agent_list(request.id),
             Method::AgentGet(target) => return self.handle_agent_get(request.id, target),
-            Method::AgentFocus(target) => return self.handle_agent_focus(request.id, target),
+            // The server half of agent.reveal is agent.focus; the headless server then
+            // asks its clients to show this machine.
+            Method::AgentFocus(target) | Method::AgentReveal(target) => {
+                return self.handle_agent_focus(request.id, target)
+            }
             Method::AgentMarkUnread(target) => {
                 return self.handle_agent_mark_unread(request.id, target);
             }
