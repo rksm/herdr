@@ -3,7 +3,7 @@
 # managed by herdr; reinstalling or updating the integration overwrites this file.
 # add custom hooks beside this file instead of editing it.
 # HERDR_INTEGRATION_ID=claude
-# HERDR_INTEGRATION_VERSION=11
+# HERDR_INTEGRATION_VERSION=12
 
 set -eu
 
@@ -20,6 +20,10 @@ esac
 [ "${HERDR_ENV:-}" = "1" ] || exit 0
 [ -n "${HERDR_SOCKET_PATH:-}" ] || exit 0
 [ -n "${HERDR_PANE_ID:-}" ] || exit 0
+# A background session, such as one that /fork starts, runs under Claude's
+# daemon and inherits HERDR_PANE_ID from the pane that started it. That pane
+# does not show the session, so its reports would name the wrong session.
+[ "${CLAUDE_CODE_SESSION_KIND:-}" != "bg" ] || exit 0
 command -v python3 >/dev/null 2>&1 || exit 0
 
 HERDR_ACTION="$action" HERDR_HOOK_INPUT_FILE="$hook_input_file" python3 - <<'PY'

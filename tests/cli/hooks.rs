@@ -98,6 +98,7 @@ fn run_shell_hook_with_env(
         .env("HERDR_PANE_ID", "p_test")
         .env_remove("CODEX_THREAD_ID")
         .env_remove("CURSOR_VERSION")
+        .env_remove("CLAUDE_CODE_SESSION_KIND")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -164,6 +165,24 @@ fn claude_hook_reports_session_id_from_stdin() {
     assert_eq!(request["params"]["agent_session_id"], "claude-session");
     assert_eq!(request["params"]["permission_mode"], "bypassPermissions");
     assert!(request["params"].get("state").is_none());
+}
+
+#[test]
+fn claude_hook_ignores_background_sessions() {
+    // A background session inherits HERDR_PANE_ID from the pane that started
+    // it, which does not show it.
+    for hook_input in [
+        r#"{"hook_event_name":"SessionStart","session_id":"claude-fork"}"#,
+        r#"{"hook_event_name":"UserPromptSubmit","session_id":"claude-fork","permission_mode":"bypassPermissions","prompt":"hi"}"#,
+    ] {
+        assert!(run_shell_hook_with_env(
+            "src/integration/assets/claude/herdr-agent-state.sh",
+            &["session"],
+            hook_input,
+            &[("CLAUDE_CODE_SESSION_KIND", "bg")],
+        )
+        .is_none());
+    }
 }
 
 #[test]
