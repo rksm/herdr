@@ -1413,7 +1413,9 @@ impl TerminalState {
             ) | (
                 "herdr:codex",
                 "codex",
-                Some("startup" | "clear" | "resume" | "compact")
+                // Codex reports "fork" for /fork and `codex fork`. A spawned
+                // subagent's fork runs SubagentStart, which the hook skips.
+                Some("startup" | "clear" | "resume" | "compact" | "fork")
             ) | ("herdr:mastracode", "mastracode", Some("startup"))
                 | ("herdr:hermes", "hermes", Some("startup" | "new" | "resume"))
                 | ("herdr:opencode", "opencode", Some("select"))
@@ -4965,7 +4967,7 @@ mod tests {
 
     #[test]
     fn codex_lifecycle_session_ref_replaces_existing_session_ref() {
-        for session_start_source in ["startup", "clear", "resume", "compact"] {
+        for session_start_source in ["startup", "clear", "resume", "compact", "fork"] {
             let mut terminal = test_terminal();
             terminal
                 .set_agent_session_ref(
