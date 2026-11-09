@@ -1,7 +1,7 @@
 id = "pi"
-version = "2026.10.01.1"
+version = "2026.11.07.1"
 min_engine_version = 1
-updated_at = "2026-10-01T00:00:00Z"
+updated_at = "2026-11-07T00:00:00Z"
 aliases = ["herdr:pi"]
 
 [[rules]]
@@ -24,4 +24,18 @@ visible_working = true
 any = [
   { line_regex = ['^── [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Working ─+$'] },
   { line_regex = ['^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Working$'] },
+]
+
+# Pi asks whether to trust a folder with project resources at startup,
+# before its extension reports any state. The startup selector shows the
+# question above its options and the key hints below them.
+[[rules]]
+id = "project_trust_prompt"
+state = "blocked"
+priority = 950
+region = "bottom_non_empty_lines(24)"
+visible_blocker = true
+line_regex = [
+  '^\s*Trust project folder\?\s*$',
+  '^\s*↑↓ navigate\s+enter select\s+escape/ctrl\+c cancel\s*$',
 ]
